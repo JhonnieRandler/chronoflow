@@ -165,12 +165,21 @@
       const fileNameSpan = document.getElementById("file-name");
       const dashboardOutput = document.getElementById("dashboard-output");
 
-      // --- Chaves do LocalStorage ---
       const ALL_PROJECTS_DATA_KEY = "allProjectsData";
       const ALL_TASKRSRC_DATA_KEY = "allTaskRsrcData";
       const WEEKS_DATA_KEY = "projectWeeksRangeData";
 
-      // --- Mapeamento de Colunas a Salvar ---
+      const OVERWRITE_TABLE_NAMES = [
+        "PROJECT",
+        "RSRC",
+        "TASK",
+        "TASKPRED",
+        "ACTVCODE",
+        "TASKACTV",
+        "PROJWBS",
+        "WBS_HIERARCHY",
+      ];
+
       const COLUMNS_TO_SAVE_MAP = {
         PROJECT: [
           "proj_id",
@@ -218,9 +227,10 @@
           "level",
           "parent_stable_wbs_id",
         ],
+        ACTVCODE: ["actv_code_name", "parent_actv_code_name"],
+        TASKACTV: ["task_id_code", "actv_code_id_name"],
       };
 
-      // --- Funções de Drag & Drop ---
       ["dragenter", "dragover", "dragleave", "drop"].forEach((eventName) => {
         dropArea.addEventListener(eventName, preventDefaults, false);
         document.body.addEventListener(eventName, preventDefaults, false);
@@ -249,7 +259,6 @@
         handleFiles(e.target.files);
       });
 
-      // --- Funções Auxiliares de Data ---
       function formatBrazilianDate(d) {
         if (!d) return "N/A";
         const datePart = d.split(" ")[0];
@@ -273,7 +282,6 @@
         return foundWeek ? foundWeek.Semana : null;
       }
 
-      // --- Lógica Principal de Processamento do Arquivo ---
       async function handleFiles(files) {
         if (files.length === 0) return;
         const file = files[0];
@@ -290,25 +298,20 @@
           try {
             const fileContent = e.target.result;
             const parsedTables = parseXER(fileContent);
-
             const currentProjectId =
               parsedTables["PROJECT"]?.rows[0]?.proj_id || `UNK_${Date.now()}`;
-
             const transformedTables = transformData(
               parsedTables,
               currentProjectId
             );
-
             let allProjectsData = JSON.parse(
               localStorage.getItem(ALL_PROJECTS_DATA_KEY) || "{}"
             );
             let allTaskRsrcData = JSON.parse(
               localStorage.getItem(ALL_TASKRSRC_DATA_KEY) || "[]"
             );
-
-            // Atualiza os dados do projeto atual
             const currentProjectVersionTables = {};
-            Object.keys(COLUMNS_TO_SAVE_MAP).forEach((tableName) => {
+            OVERWRITE_TABLE_NAMES.forEach((tableName) => {
               if (transformedTables[tableName]) {
                 currentProjectVersionTables[tableName] = filterTableColumns(
                   transformedTables[tableName],
@@ -317,8 +320,6 @@
               }
             });
             allProjectsData[currentProjectId] = currentProjectVersionTables;
-
-            // Atualiza os dados de recursos (TASKRSRC)
             if (transformedTables["TASKRSRC"]?.rows.length > 0) {
               allTaskRsrcData = allTaskRsrcData.filter(
                 (item) => item.proj_id !== currentProjectId
@@ -329,7 +330,6 @@
               );
               allTaskRsrcData.push(...filteredTaskRsrcRows);
             }
-
             localStorage.setItem(
               ALL_PROJECTS_DATA_KEY,
               JSON.stringify(allProjectsData)
@@ -338,14 +338,13 @@
               ALL_TASKRSRC_DATA_KEY,
               JSON.stringify(allTaskRsrcData)
             );
-
-            loadDashboard(); // Atualiza o dashboard com os novos dados
+            loadDashboard();
           } catch (error) {
             console.error("Erro ao processar ou salvar o arquivo:", error);
             dashboardOutput.innerHTML = `<p class="message-box error">Erro ao processar o arquivo: ${error.message}.</p>`;
           }
         };
-        reader.readAsText(file, "ISO-8859-1"); // Usar codificação correta para .xer
+        reader.readAsText(file, "ISO-8859-1");
       }
 
       function parseXER(xerContent) {
@@ -353,7 +352,6 @@
         const tables = {};
         let currentTableName = null;
         let currentTableHeaders = [];
-
         for (const line of lines) {
           const trimmedLine = line.trim();
           if (trimmedLine.startsWith("%T")) {
@@ -383,16 +381,14 @@
       }
 
       function transformData(parsedTables, currentProjectId) {
-        // Deep copy para evitar mutações indesejadas
         const transformed = JSON.parse(JSON.stringify(parsedTables));
 
-        // Criação da WBS_HIERARCHY
         const wbsData = transformed.PROJWBS?.rows || [];
         const wbsMap = new Map(wbsData.map((wbs) => [wbs.wbs_id, wbs]));
         const hierarchyData = [];
         const originalToStableIdMap = new Map();
+        const levelCache = new Map();
 
-        // Construir IDs estáveis para garantir consistência
         wbsData.forEach((wbs) => {
           let path = [wbs.wbs_name];
           let current = wbs;
@@ -404,8 +400,6 @@
           originalToStableIdMap.set(wbs.wbs_id, stableId);
         });
 
-        // Função para calcular o nível da WBS
-        const levelCache = new Map();
         function getWbsLevel(wbsId) {
           if (levelCache.has(wbsId)) return levelCache.get(wbsId);
           const wbs = wbsMap.get(wbsId);
@@ -419,16 +413,23 @@
           return currentLevel;
         }
 
-        // Popular a tabela WBS_HIERARCHY
+        const rootWbs = wbsData.find(
+          (w) => !w.parent_wbs_id || !wbsMap.has(w.parent_wbs_id)
+        );
+        const rootWbsStableId = rootWbs
+          ? originalToStableIdMap.get(rootWbs.wbs_id)
+          : null;
+
         wbsData.forEach((wbs) => {
+          if (originalToStableIdMap.get(wbs.wbs_id) === rootWbsStableId) return;
           hierarchyData.push({
             stable_wbs_id: originalToStableIdMap.get(wbs.wbs_id),
             wbs_name: wbs.wbs_name,
-            wbs_group_id: wbs.wbs_name,
-            level: getWbsLevel(wbs.wbs_id),
-            parent_stable_wbs_id: wbs.parent_wbs_id
-              ? originalToStableIdMap.get(wbs.parent_wbs_id)
-              : null,
+            level: getWbsLevel(wbs.wbs_id) - 1,
+            parent_stable_wbs_id:
+              originalToStableIdMap.get(wbs.parent_wbs_id) === rootWbsStableId
+                ? null
+                : originalToStableIdMap.get(wbs.parent_wbs_id),
           });
         });
 
@@ -436,26 +437,55 @@
           headers: [
             "stable_wbs_id",
             "wbs_name",
-            "wbs_group_id",
             "level",
             "parent_stable_wbs_id",
           ],
           rows: hierarchyData,
         };
 
-        // Mapeamentos para enriquecimento de dados
+        const rsrcIdToNameMap = new Map(
+          transformed.RSRC?.rows.map((r) => [r.rsrc_id, r.rsrc_name])
+        );
         const taskIdToCodeMap = new Map(
           transformed.TASK?.rows.map((t) => [t.task_id, t.task_code])
         );
+        const actvCodeIdToNameMap = new Map(
+          transformed.ACTVCODE?.rows.map((c) => [
+            c.actv_code_id,
+            c.actv_code_name,
+          ])
+        );
 
-        // Adicionar referência wbs_stable_id_ref à tabela TASK
         if (transformed.TASK) {
           transformed.TASK.rows.forEach((task) => {
             task.wbs_stable_id_ref =
               originalToStableIdMap.get(task.wbs_id) || null;
+            task.act_start_date =
+              task.act_start_date || task.actual_start_dt || "";
+            task.act_end_date = task.act_end_date || task.actual_end_dt || "";
+            task.target_start_date =
+              task.target_start_date || task.target_start_dt || "";
+            task.target_end_date =
+              task.target_end_date || task.target_end_dt || "";
+            task.restart_date = task.restart_date || "";
+            task.reend_date = task.reend_date || "";
           });
+          const newHeaders = [
+            "wbs_stable_id_ref",
+            "act_start_date",
+            "act_end_date",
+            "restart_date",
+            "reend_date",
+            "target_start_date",
+            "target_end_date",
+          ];
+          newHeaders.forEach(
+            (h) =>
+              !transformed.TASK.headers.includes(h) &&
+              transformed.TASK.headers.push(h)
+          );
         }
-        // Adicionar códigos de task às tabelas de relacionamento
+
         if (transformed.TASKPRED) {
           transformed.TASKPRED.rows.forEach((pred) => {
             pred.task_id_code =
@@ -463,18 +493,54 @@
             pred.pred_task_id_code =
               taskIdToCodeMap.get(pred.pred_task_id) || pred.pred_task_id;
           });
+          if (!transformed.TASKPRED.headers.includes("task_id_code")) {
+            transformed.TASKPRED.headers.push("task_id_code");
+          }
+          if (!transformed.TASKPRED.headers.includes("pred_task_id_code")) {
+            transformed.TASKPRED.headers.push("pred_task_id_code");
+          }
         }
         if (transformed.TASKRSRC) {
-          const rsrcIdToNameMap = new Map(
-            transformed.RSRC?.rows.map((r) => [r.rsrc_id, r.rsrc_name])
-          );
           transformed.TASKRSRC.rows.forEach((taskrsrc) => {
             taskrsrc.task_id_code =
               taskIdToCodeMap.get(taskrsrc.task_id) || taskrsrc.task_id;
             taskrsrc.rsrc_id_name =
               rsrcIdToNameMap.get(taskrsrc.rsrc_id) || taskrsrc.rsrc_id;
-            taskrsrc.proj_id = currentProjectId; // Adiciona o ID do projeto atual
+            taskrsrc.proj_id = currentProjectId;
           });
+          if (!transformed.TASKRSRC.headers.includes("task_id_code")) {
+            transformed.TASKRSRC.headers.push("task_id_code");
+          }
+          if (!transformed.TASKRSRC.headers.includes("rsrc_id_name")) {
+            transformed.TASKRSRC.headers.push("rsrc_id_name");
+          }
+          if (!transformed.TASKRSRC.headers.includes("proj_id")) {
+            transformed.TASKRSRC.headers.push("proj_id");
+          }
+        }
+        if (transformed.ACTVCODE) {
+          transformed.ACTVCODE.rows.forEach((code) => {
+            code.parent_actv_code_name =
+              actvCodeIdToNameMap.get(code.parent_actv_code_id) || "";
+          });
+          if (!transformed.ACTVCODE.headers.includes("parent_actv_code_name")) {
+            transformed.ACTVCODE.headers.push("parent_actv_code_name");
+          }
+        }
+        if (transformed.TASKACTV) {
+          transformed.TASKACTV.rows.forEach((taskactv) => {
+            taskactv.task_id_code =
+              taskIdToCodeMap.get(taskactv.task_id) || taskactv.task_id;
+            taskactv.actv_code_id_name =
+              actvCodeIdToNameMap.get(taskactv.actv_code_id) ||
+              taskactv.actv_code_id;
+          });
+          if (!transformed.TASKACTV.headers.includes("task_id_code")) {
+            transformed.TASKACTV.headers.push("task_id_code");
+          }
+          if (!transformed.TASKACTV.headers.includes("actv_code_id_name")) {
+            transformed.TASKACTV.headers.push("actv_code_id_name");
+          }
         }
         return transformed;
       }
@@ -508,7 +574,6 @@
         });
       }
 
-      // --- Funções de Renderização do Dashboard ---
       function displayDashboard(allProjectsData, weeksMapping) {
         let projectsListHtml = Object.keys(allProjectsData)
           .map((projId) => {
@@ -532,22 +597,18 @@
 
         const navigationHtml = `
             <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mt-8">
-              <!-- Botão Configurações -->
               <a href="configuracao.html" class="nav-button">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                 <span class="font-semibold">Configurações</span>
               </a>
-              <!-- Botão Próximas Semanas -->
               <a href="proximas_semanas.html" class="nav-button">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                 <span class="font-semibold">Próximas Semanas</span>
               </a>
-              <!-- Botão Análise de Atividade -->
               <a href="analise_atividade.html" class="nav-button">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
                 <span class="font-semibold">Análise Detalhada</span>
               </a>
-               <!-- Botão Visualizador -->
               <a href="visualizador.html" class="nav-button">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
                 <span class="font-semibold">Visualizador de Dados</span>
@@ -573,9 +634,7 @@
           const weeksMapping = JSON.parse(
             localStorage.getItem(WEEKS_DATA_KEY) || "[]"
           );
-
           const projectIds = Object.keys(allProjectsData);
-
           if (projectIds.length > 0) {
             displayDashboard(allProjectsData, weeksMapping);
             fileDisplay.classList.remove("hidden");
@@ -593,7 +652,6 @@
         }
       }
 
-      // --- Inicialização da Página ---
       window.onload = loadDashboard;
     </script>
   </body>
