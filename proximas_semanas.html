@@ -526,33 +526,51 @@
           const isExpanded = content.classList.contains("expanded");
 
           if (isExpanded) {
-            // Start Collapse: Set max-height to a pixel value to start the transition.
+            // To collapse: Set max-height from 'none' or current px value to its current pixel height.
+            // This gives the CSS transition a defined starting value.
             content.style.maxHeight = content.scrollHeight + "px";
+
+            // In the next frame, set max-height to 0 to start the collapse animation.
             requestAnimationFrame(() => {
               content.classList.remove("expanded");
               content.style.maxHeight = "0px";
               if (icon) icon.textContent = "+";
             });
           } else {
-            // Start Expand
+            // To expand: Add the class and set max-height to its scrollHeight.
             content.classList.add("expanded");
             if (icon) icon.textContent = "-";
             content.style.maxHeight = content.scrollHeight + "px";
           }
         });
 
-        // Listener for cleaning up after transitions end.
+        // Listener for cleaning up after transitions and updating parents.
         dashboardOutput.addEventListener("transitionend", (e) => {
+          const content = e.target;
+
+          // Ensure we're dealing with the right element and property
           if (
-            e.target.classList.contains("wbs-content") &&
-            e.propertyName === "max-height"
+            !content.classList.contains("wbs-content") ||
+            e.propertyName !== "max-height"
           ) {
-            const content = e.target;
-            // If the element is expanded (max-height is not '0px'), set max-height to 'none'.
-            // This allows the element to grow dynamically if its children expand.
-            if (content.style.maxHeight !== "0px") {
-              content.style.maxHeight = "none";
-            }
+            return;
+          }
+
+          // After an animation, find the parent and update its height
+          const parent = content.parentElement.closest(".wbs-content.expanded");
+          if (parent) {
+            // If the parent is expanded, its scrollHeight has now changed.
+            // Re-set its max-height to its new scrollHeight to animate the change.
+            // The 'none' setting will be applied when the PARENT'S transition ends,
+            // creating a chain reaction.
+            parent.style.maxHeight = parent.scrollHeight + "px";
+          }
+
+          // After dealing with the parent, finalize the state of the current element.
+          // If it has finished expanding (is not collapsed), set max-height to 'none'
+          // so it can auto-resize if ITS children change later.
+          if (content.style.maxHeight !== "0px") {
+            content.style.maxHeight = "none";
           }
         });
 
