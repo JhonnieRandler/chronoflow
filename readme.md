@@ -1,75 +1,122 @@
-# **Documentação do Projeto de Acompanhamento Primavera P6 (Versão Final)**
+# 📊 **Projeto de Acompanhamento de Cronogramas P6**
 
-Este documento detalha a finalidade, a arquitetura, o fluxo de uso e as lógicas implementadas no sistema de acompanhamento de projetos do Primavera P6.
+Este documento detalha a finalidade, a arquitetura, o fluxo de uso e os algoritmos implementados no sistema de análise e visualização de projetos do Primavera P6.
 
-## **1\. Finalidade do Projeto**
+## 🌟 1. Finalidade do Projeto
 
-O objetivo principal deste sistema é simplificar e otimizar a análise de cronogramas e recursos de projetos gerenciados no Primavera P6. A ferramenta transforma dados brutos de arquivos .xer em dashboards e visualizações interativas e intuitivas. Ela permite não apenas visualizar os dados do cronograma, mas também sobrepô-los com valores personalizados (topográficos) para uma análise mais fiel à realidade do campo, facilitando uma gestão de projeto ágil e informada.
+O objetivo deste sistema é transformar dados brutos de arquivos `.xer` em dashboards interativos e intuitivos, simplificando a análise de cronogramas e recursos. A ferramenta permite não apenas visualizar os dados do P6, mas também sobrepô-los com valores personalizados (ex: medições topográficas) para uma análise mais fiel à realidade do campo. O sistema foi projetado para facilitar uma gestão de projeto ágil, visual e informada, eliminando a necessidade de planilhas complexas e análises manuais.
 
-## **2\. Arquitetura e Fluxo de Dados**
+## 💾 2. Arquitetura e Fluxo de Dados
 
-O sistema é uma aplicação web que roda 100% no navegador do usuário (client-side), sem a necessidade de um servidor back-end. Todos os dados, tanto do projeto quanto das configurações, são persistidos no localStorage do navegador.
+O sistema é uma **aplicação 100% client-side**, o que significa que roda inteiramente no navegador do usuário sem depender de um servidor back-end.
 
-O fluxo de trabalho recomendado é:
+> **Persistência de Dados:** Todos os dados, tanto do projeto quanto das configurações, são armazenados no `localStorage` do navegador. Isso garante privacidade total (os dados nunca saem da máquina do usuário) e o funcionamento offline da aplicação após o primeiro carregamento.
 
-1. **Upload e Processamento (index.html):** O usuário inicia enviando um arquivo .xer atualizado. Este passo é crucial, pois é aqui que todos os dados brutos são lidos, processados e estruturados.  
-2. **Configuração (configuracao.html):** O usuário acessa o painel de configurações para parametrizar como os dados serão analisados. Isso inclui definir o calendário, agrupar atividades, inserir valores personalizados, etc.  
-3. **Análise e Visualização:** Com os dados processados e configurados, o usuário pode explorar as páginas de análise (proximas\_semanas.html, analise\_atividade.html) para extrair insights.  
-4. **Backup (configuracao.html):** Periodicamente, o usuário pode exportar todos os dados e configurações para um arquivo de backup, garantindo a segurança e a portabilidade das suas análises.
+### Fluxo de Trabalho Recomendado
 
-## **3\. Detalhamento dos Arquivos (Páginas)**
+1.  **📤 Upload e Processamento (`index.html`):** O usuário envia um arquivo `.xer` atualizado. Este é o ponto de partida e o passo mais crítico.
+2.  **⚙️ Configuração (`configuracao.html`):** O usuário parametriza como os dados serão analisados, adequando a ferramenta à realidade do projeto.
+3.  **📈 Análise e Visualização:** Com os dados processados e configurados, o usuário explora as páginas de análise (`proximas_semanas.html`, `analise_atividade.html`).
+4.  **📦 Backup (`configuracao.html`):** O usuário exporta todos os dados e configurações para um arquivo `.json`, garantindo a segurança e portabilidade de suas análises.
 
-### **3.1. index.html (Painel de Controle e Processador de Dados)**
+## 📄 3. Detalhamento das Páginas e Funcionalidades
 
-Esta é a porta de entrada do sistema.
+### `index.html` (Painel Principal e Processador de Dados)
 
-* **Interface de Upload:** Permite o envio de arquivos .xer através de um seletor ou da funcionalidade de arrastar e soltar (drag-and-drop).  
-* **Painel de Navegação:** Após o processamento, a página exibe um resumo dos projetos carregados e botões de navegação claros para as outras seções da ferramenta.  
-* **Lógica Essencial \- transformData():** Esta é a função mais importante do sistema. Ao receber os dados do .xer, ela realiza um profundo trabalho de transformação e enriquecimento:  
-  * **Criação da Hierarquia WBS (WBS\_HIERARCHY):**  
-    1. Para cada item da WBS (EAP), a função percorre a árvore hierárquica até a raiz para construir um **ID estável e único (stable\_wbs\_id)**. Este ID é o caminho completo do item (ex: PROJETO \> ÁREA 1 \> EDIFÍCIO A). Isso é vital para que os relacionamentos não se quebrem, mesmo que os IDs internos do P6 mudem.  
-    2. O item raiz da WBS é corretamente identificado, e seus filhos diretos são marcados como sendo de nível 1, sem um "pai" visível na hierarquia da aplicação.  
-  * **Enriquecimento de Dados:**  
-    1. **Relacionamentos (Predecessoras/Sucessoras):** A função traduz os IDs técnicos da tabela TASKPRED (ex: task\_id) para os códigos de atividade legíveis (task\_code), permitindo que a página de análise mostre os relacionamentos corretamente.  
-    2. **Atribuição de WBS:** Cada atividade na tabela TASK recebe uma referência (wbs\_stable\_id\_ref) ao stable\_wbs\_id de seu WBS correspondente.  
-    3. Demais tabelas como TASKRSRC e TASKACTV também são enriquecidas com códigos e nomes legíveis.
+A porta de entrada do sistema. Sua função mais importante é processar os dados brutos.
 
-### **3.2. configuracao.html (Painel de Configurações)**
+- **Interface de Upload:** Permite o envio de arquivos `.xer` via seletor ou drag-and-drop.
+- **Lógica Principal (`transformData()`):** Esta função é o coração do sistema, responsável por transformar dados crus em informação estruturada.
+  - **Criação da Hierarquia WBS:** Constrói um **ID estável (`stable_wbs_id`)** para cada item da WBS (EAP), que consiste no caminho completo do item (ex: `PROJETO > ÁREA 1 > EDIFÍCIO A`). Isso é vital para que os relacionamentos hierárquicos se mantenham íntegros.
+  - **Enriquecimento de Dados:** IDs técnicos (de predecessoras, recursos, etc.) são "traduzidos" para seus nomes e códigos legíveis.
 
-Esta página centraliza todas as configurações do projeto através de uma interface de modais com cabeçalho e rodapé fixos, proporcionando uma excelente experiência de usuário.
+### `configuracao.html` (Painel de Configurações)
 
-* **Mapeamento de Semanas:** Permite ao usuário fazer o upload (ou arrastar) de uma planilha Excel (.xlsx) com as colunas "Semana" e "Data" para definir os períodos de análise.  
-* **Recurso Principal:** Permite selecionar qual recurso (ex: "Hh") será a unidade principal para medir o avanço físico.  
-* **Agrupamento e Ocultação:** Oferece controle granular sobre como as atividades serão exibidas no dashboard semanal.  
-* **Mapeamento de Atividades:**  
-  * **Interface em Tabela:** Os grupos de atividades são gerenciados em uma tabela clara e ordenada alfabeticamente.  
-  * **Validação de Exclusividade:** A lógica impede que uma mesma atividade seja adicionada a mais de um grupo, garantindo a integridade dos dados. As atividades já alocadas não aparecem na lista de seleção.  
-* **Valores Personalizados:**  
-  * Permite ao usuário inserir valores "Previsto" e "Realizado" que se sobrepõem aos do cronograma (ex: valores de topografia).  
-  * A interface também é em formato de tabela, e a lógica impede que um mesmo item (atividade ou grupo) tenha mais de uma entrada de valor personalizado.  
-* **Importar & Exportar:**  
-  * **Exportar:** Cria um arquivo .json contendo um backup completo de **todos os dados de projetos e configurações** armazenados no localStorage.  
-  * **Importar:** Permite carregar um arquivo de backup .json, substituindo todos os dados atuais e restaurando o estado do sistema.
+Centraliza todas as parametrizações da aplicação através de uma interface de modais.
 
-### **3.3. proximas\_semanas.html (Dashboard de Próximas Semanas)**
+- **Mapeamento de Atividades:** Permite criar **grupos lógicos de atividades**. Por exemplo, "Escavação Bloco A - Etapa 1" e "Escavação Bloco A - Etapa 2" podem ser agrupados como "Escavação Bloco A". A lógica impede que uma mesma atividade pertença a múltiplos grupos.
+- **Valores Personalizados:** Permite ao usuário inserir valores "Previsto" e "Realizado" que se **sobrepõem** aos do cronograma. Pode ser aplicado a atividades individuais ou a grupos. Ideal para registrar medições de campo (topografia, engenharia) que refletem o avanço real.
+- **Agrupamento e Ocultação:** Oferece controle granular sobre a exibição das atividades no dashboard de próximas semanas, permitindo focar em níveis hierárquicos específicos e ocultar itens de baixo impacto.
+- **Importar & Exportar:** Cria um backup (`.json`) com um snapshot completo de **todos os dados de projetos e configurações** salvas. Essencial para segurança e portabilidade.
 
-Página interativa para visualização do planejamento de curto prazo.
+### `proximas_semanas.html` (Dashboard de Próximas Semanas)
 
-* **Visão Futura:** A análise sempre começa a partir da **semana seguinte** à semana atual, focando estritamente no planejamento futuro.  
-* **Navegação em Carrossel:** Exibe uma semana por vez, com navegação intuitiva através de botões laterais fixos e indicadores visuais.  
-* **Filtros de Atividades:** Permite filtrar a visualização para mostrar apenas atividades que **iniciam**, **finalizam** ou estão **em andamento** na semana.  
-* **Tooltip de Saldo:** Ao passar o mouse sobre uma atividade ou grupo que possui valores personalizados, um tooltip exibe o "Saldo Topográfico" restante, fornecendo um insight rápido sem sair da tela.  
-* **Hierarquia Retrátil Inteligente:** Os grupos de WBS podem ser expandidos ou colapsados. A lógica foi aprimorada para que, ao expandir um item, todos os seus contêineres "pai" se ajustem dinamicamente em altura, garantindo que nenhum conteúdo fique oculto.
+Página interativa para visualização do planejamento de curto prazo (6 semanas futuras).
 
-### **3.4. analise\_atividade.html (Análise Detalhada)**
+- **Navegação em Carrossel:** Exibe uma semana por vez, com navegação intuitiva.
+- **Hierarquia Retrátil Inteligente:** Os grupos de WBS são aninhados e podem ser expandidos/colapsados. O algoritmo ajusta dinamicamente a altura dos contêineres "pai" para uma experiência fluida.
+- **Exibição Consolidada:** Atividades de um mesmo grupo mapeado são exibidas de forma unificada, mostrando o nome do grupo e a etapa (`Etapa 1 de 3`), simplificando a visualização.
+- **Tooltip de Saldo:** Ao passar o mouse sobre um item com valores personalizados, um tooltip exibe o **"Saldo Topográfico"**, fornecendo um insight rápido do avanço real.
+
+### `analise_atividade.html` (Análise Detalhada)
 
 Oferece uma visão profunda e comparativa de uma atividade ou grupo.
 
-* **Busca Híbrida:** O campo de seleção permite buscar tanto por atividades individuais quanto por grupos de atividades mapeados.  
-* **Análise Comparativa:**  
-  * Exibe os dados padrão vindos do cronograma (datas, durações, progresso de recursos).  
-  * Se um item possui valores personalizados, um card destacado de "Análise de Valores Topográficos" é exibido, mostrando o previsto, o realizado, o saldo e o percentual de avanço genuínos, permitindo uma comparação direta com os dados do cronograma.
+- **Busca Híbrida:** Permite buscar e analisar tanto atividades individuais quanto grupos.
+- **Card de Análise Topográfica:** Se o item selecionado possui valores personalizados, um card especial e destacado exibe o previsto, realizado, saldo e o percentual de avanço com base nesses valores, permitindo uma **comparação direta e imediata** entre o avanço do cronograma e o avanço medido em campo.
+- **Gráfico de Evolução:** Mostra a evolução histórica de recursos para atividades individuais.
 
-### **3.5. visualizador.html (Visualizador de Tabelas)**
+### `visualizador.html` (Visualizador de Tabelas)
 
-Uma ferramenta de utilidade para desenvolvedores e usuários avançados que precisam inspecionar os dados brutos ou transformados que estão armazenados no sistema. É ideal para depuração e verificação da integridade dos dados.
+Ferramenta de utilidade para desenvolvedores e usuários avançados que precisam inspecionar os dados brutos ou transformados armazenados no sistema, ideal para depuração e verificação de integridade.
+
+## 🧠 4. Lógicas e Algoritmos Principais (Para Desenvolvedores)
+
+Esta seção detalha as implementações-chave que sustentam as funcionalidades do sistema.
+
+### 4.1. Processamento do `.XER` e Criação da Hierarquia Estável
+
+- **Função Principal:** `transformData()` em `index.html`.
+- **Problema:** Os IDs de WBS (`wbs_id`) no Primavera P6 são numéricos e podem mudar entre as versões do cronograma. Usá-los como referência direta levaria a inconsistências.
+- **Solução:** Foi criado um **ID Estável (`stable_wbs_id`)**.
+
+  1.  O algoritmo primeiro mapeia todos os itens da WBS (`PROJWBS`) em um `Map` para acesso rápido.
+  2.  Ele percorre recursivamente a árvore hierárquica de cada item da WBS, concatenando os nomes de cada nível para formar um caminho legível e único (ex: `"Projeto X > Área Y > Disciplina Z"`).
+  3.  Este caminho se torna o `stable_wbs_id`, que é então usado em toda a aplicação como a chave primária para a hierarquia, garantindo consistência entre diferentes arquivos `.xer`.
+
+  ```javascript
+  // Pseudo-código da lógica de criação do ID estável
+  function generateStableWbsId(wbsItem, wbsMap) {
+    let path = [wbsItem.wbs_name];
+    let current = wbsItem;
+    while (current.parent_wbs_id && wbsMap.has(current.parent_wbs_id)) {
+      current = wbsMap.get(current.parent_wbs_id);
+      path.unshift(current.wbs_name);
+    }
+    return path.join(" > ");
+  }
+  ```
+
+### 4.2. Geração da Visão Hierárquica no Dashboard Semanal
+
+- **Função Principal:** `buildGroupedTreeRecursive()` em `proximas_semanas.html`.
+- **Objetivo:** Montar a estrutura de árvore aninhada das atividades com base nos níveis de WBS que o usuário selecionou na configuração.
+- **Implementação:**
+  1.  A função recebe um item (atividade ou grupo), um array dos níveis de WBS para agrupar (ex: `[1, 3]`) e a árvore de dados da semana atual.
+  2.  De forma recursiva, ela "desce" pela árvore, usando o `stable_wbs_id` da atividade para encontrar o nó correspondente em cada nível de agrupamento definido.
+  3.  Quando todos os níveis de agrupamento foram percorridos, a atividade é inserida na folha correta da árvore. Se um nível intermediário não existir, ele é criado dinamicamente.
+  4.  O resultado é um objeto JavaScript aninhado que espelha a estrutura hierárquica desejada, pronto para ser renderizado em HTML.
+
+### 4.3. Agregação de Dados para Grupos de Atividades
+
+- **Função Principal:** `displayGroupAnalysis()` em `analise_atividade.html`.
+- **Desafio:** Ao analisar um grupo, é preciso consolidar as informações de múltiplas atividades individuais em uma única visão coerente.
+- **Lógica de Agregação:**
+  - **Recursos:** As quantidades (planejada, real, restante) de um mesmo recurso são somadas (`reduce`) em todas as atividades do grupo.
+  - **Datas Agregadas:**
+    - `target_start_date`: Usa a data de início planejada **mais antiga** entre todas as atividades.
+    - `target_end_date`: Usa a data de término planejada **mais tardia**.
+    - `act_start_date`: Usa a data de início real **mais antiga**.
+    - `aggr_end_date`: Usa a data de término real **mais tardia** se todas as atividades tiverem terminado. Caso contrário, usa a data de término prevista (tendência) **mais tardia** para refletir a projeção atual.
+
+### 4.4. Gerenciamento de Configuração Modular
+
+- **Objeto Principal:** `CONFIG_MODULES` em `configuracao.html`.
+- **Design Pattern:** Para evitar um código monolítico e complexo, a lógica de cada modal de configuração foi encapsulada em um "módulo" dentro do objeto `CONFIG_MODULES`.
+- **Estrutura do Módulo:** Cada módulo define:
+  - `title` e `subtitle`: Textos para o cabeçalho do modal.
+  - `setup()`: Uma função que gera e retorna o HTML do corpo do modal.
+  - `save()`: A função que é executada quando o botão "Salvar" é clicado.
+  - `headerAction` (opcional): Define um botão de ação extra no cabeçalho do modal (ex: "Adicionar Novo Grupo").
+
+> Esta abordagem torna o código mais limpo, fácil de manter e escalável. Adicionar uma nova opção de configuração se resume a adicionar um novo objeto a `CONFIG_MODULES` sem impactar os existentes.
