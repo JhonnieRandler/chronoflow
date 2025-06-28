@@ -372,7 +372,6 @@
     </div>
 
     <script>
-      // **CORREÇÃO**: Definindo todas as chaves em escopo global para que todas as funções possam acessá-las.
       const ALL_DATA_KEYS = [
         "allProjectsData",
         "allTaskRsrcData",
@@ -480,9 +479,11 @@
         modalSaveBtn.style.display = "none";
         modalSubtitle.textContent =
           "Gerencie grupos de atividades que representam o mesmo trabalho.";
-        document
-          .getElementById("add-new-group-btn")
-          ?.addEventListener("click", () => renderGroupEditForm());
+        if (document.getElementById("add-new-group-btn")) {
+          document.getElementById("add-new-group-btn").onclick = () =>
+            renderGroupEditForm();
+        }
+
         savedMapping.sort((a, b) => a.groupName.localeCompare(b.groupName));
         let tableHtml = `<div class="table-container"><table><thead><tr><th>Nome do Grupo</th><th>Nº de Atividades</th><th class="text-right">Ações</th></tr></thead><tbody>`;
         if (savedMapping.length > 0) {
@@ -624,7 +625,7 @@
         modalSaveBtn.style.display = "inline-flex";
         modalHeaderActions.innerHTML = "";
         modalSubtitle.textContent = id
-          ? `Editando valor para "${value.name}"`
+          ? `Editando valor para "${value.name || id}"`
           : "Criando um novo valor personalizado.";
         modalBody.innerHTML = `<div class="space-y-4"><div><label class="font-bold text-gray-700">Atividade ou Grupo</label><select id="custom-value-select" class="mt-1"></select></div><div class="grid grid-cols-2 gap-4"><div><label class="font-bold text-gray-700">Previsto Personalizado</label><input type="number" step="any" id="custom-planned-input" class="w-full p-2 border border-gray-300 rounded-md mt-1" value="${
           value.planned ?? ""
@@ -660,7 +661,6 @@
         activeTomSelects.push(tomSelect);
       }
 
-      // --- Funções de Salvamento ---
       function saveGroup() {
         const groupName = document.getElementById("group-name-input").value;
         const tomSelect = activeTomSelects[0];
@@ -768,7 +768,77 @@
         }
       }
 
-      // --- Módulos de Configuração ---
+      function processAndSaveWeeksFile(file) {
+        if (!file) {
+          showMessage("Por favor, selecione um arquivo.", "error");
+          return;
+        }
+        if (!file.name.toLowerCase().endsWith(".xlsx")) {
+          showMessage(
+            "Tipo de arquivo inválido. Use um arquivo .xlsx",
+            "error"
+          );
+          document.getElementById("weeks-file-name").textContent = "";
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          try {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, { type: "array" });
+            const sheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[sheetName];
+            const json = XLSX.utils.sheet_to_json(worksheet);
+            if (
+              json.length === 0 ||
+              !json[0].hasOwnProperty("Semana") ||
+              !json[0].hasOwnProperty("Data")
+            ) {
+              throw new Error(
+                'O arquivo Excel deve conter as colunas "Semana" e "Data".'
+              );
+            }
+            const processedWeeks = json
+              .map((row) => ({
+                Semana: row.Semana,
+                Data: new Date((row.Data - (25567 + 2)) * 86400 * 1000),
+              }))
+              .sort((a, b) => a.Data - b.Data);
+            const weekRanges = [];
+            let currentWeek = null;
+            for (let i = 0; i < processedWeeks.length; i++) {
+              if (processedWeeks[i].Semana !== currentWeek?.Semana) {
+                if (currentWeek) {
+                  currentWeek.Data_Fim = new Date(processedWeeks[i - 1].Data);
+                  weekRanges.push(currentWeek);
+                }
+                currentWeek = {
+                  Semana: processedWeeks[i].Semana,
+                  Data_Inicio: new Date(processedWeeks[i].Data),
+                };
+              }
+            }
+            if (currentWeek) {
+              currentWeek.Data_Fim = new Date(
+                processedWeeks[processedWeeks.length - 1].Data
+              );
+              weekRanges.push(currentWeek);
+            }
+            const finalData = weekRanges.map((w) => ({
+              Semana: w.Semana,
+              Data_Inicio: w.Data_Inicio.toISOString().split("T")[0],
+              Data_Fim: w.Data_Fim.toISOString().split("T")[0],
+            }));
+            localStorage.setItem(WEEKS_DATA_KEY, JSON.stringify(finalData));
+            showMessage("Mapeamento de semanas salvo com sucesso!", "success");
+          } catch (err) {
+            console.error(err);
+            showMessage(`Erro ao processar o arquivo: ${err.message}`, "error");
+          }
+        };
+        reader.readAsArrayBuffer(file);
+      }
+
       const CONFIG_MODULES = {
         weeks: {
           title: "Mapeamento de Semanas",
@@ -1007,6 +1077,7 @@
                     if (files.length > 0) {
                       fileInput.files = files;
                       fileNameDisplay.textContent = files[0].name;
+                      processAndSaveWeeksFile(files[0]);
                     }
                   },
                   false
