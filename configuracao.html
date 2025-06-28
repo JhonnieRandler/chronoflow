@@ -293,7 +293,6 @@
             </p>
           </div>
         </div>
-        <!-- NOVO: Card de Importar/Exportar -->
         <div id="config-backup" class="config-card col-span-1 md:col-span-2">
           <div class="config-icon bg-gray-200 text-gray-700">
             <svg
@@ -373,7 +372,7 @@
     </div>
 
     <script>
-      // --- Chaves do LocalStorage ---
+      // **CORREÇÃO**: Definindo todas as chaves em escopo global para que todas as funções possam acessá-las.
       const ALL_DATA_KEYS = [
         "allProjectsData",
         "allTaskRsrcData",
@@ -384,11 +383,21 @@
         "activityMapping",
         "customActivityValues",
       ];
+      const [
+        PROJECTS_DATA_KEY,
+        TASKRSRC_DATA_KEY,
+        WEEKS_DATA_KEY,
+        MAIN_RESOURCE_KEY,
+        WEEKS_VIEW_GROUPING_KEY,
+        WEEKS_VIEW_HIDDEN_ACTIVITIES_KEY,
+        ACTIVITY_MAPPING_KEY,
+        CUSTOM_VALUES_KEY,
+      ] = ALL_DATA_KEYS;
 
       let latestProjectData = null;
       let activeTomSelects = [];
       let currentEditingId = null;
-      let fileToImport = null; // Armazena o arquivo selecionado para importação
+      let fileToImport = null;
 
       const modal = document.getElementById("modal");
       const modalTitle = document.getElementById("modal-title");
@@ -400,7 +409,6 @@
       const modalMessageArea = document.getElementById("modal-message-area");
       const modalSaveBtn = document.getElementById("modal-save-btn");
 
-      // --- Funções Auxiliares ---
       function showMessage(text, type) {
         modalMessageArea.innerHTML = `<div class="message-box ${type}">${text}</div>`;
         setTimeout(() => {
@@ -411,7 +419,7 @@
       function getLatestProject() {
         if (latestProjectData) return latestProjectData;
         const allProjectsData = JSON.parse(
-          localStorage.getItem("allProjectsData") || "{}"
+          localStorage.getItem(PROJECTS_DATA_KEY) || "{}"
         );
         const projectIds = Object.keys(allProjectsData);
         if (projectIds.length === 0) return null;
@@ -438,7 +446,6 @@
         });
       }
 
-      // --- Gestão do Modal ---
       function openModal(module) {
         modalTitle.textContent = module.title;
         modalSubtitle.textContent = module.subtitle || "";
@@ -463,10 +470,9 @@
 
       function closeModal() {
         modal.classList.remove("active");
-        fileToImport = null; // Limpa o arquivo ao fechar o modal
+        fileToImport = null;
       }
 
-      // --- Funções de UI Específicas ---
       function renderActivityMappingTable() {
         let savedMapping = JSON.parse(
           localStorage.getItem(ACTIVITY_MAPPING_KEY) || "[]"
@@ -743,7 +749,6 @@
         } else {
           savedValues.push(newValue);
         }
-
         localStorage.setItem(CUSTOM_VALUES_KEY, JSON.stringify(savedValues));
         showMessage("Valor personalizado salvo!", "success");
         openModal(CONFIG_MODULES["custom-values"]);
