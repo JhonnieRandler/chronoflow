@@ -248,7 +248,6 @@
       }
 
       function buildGroupedTreeRecursive(item, levels, currentTree) {
-        // (Código inalterado)
         const { type, task, groupName } = item;
         const [currentLevelToGroup, ...remainingLevels] = levels;
         if (!currentLevelToGroup) return;
@@ -458,20 +457,31 @@
         );
 
         if (isExpanding) {
-          allContentElements.reverse().forEach((content) => {
+          // Expand from the inside out to calculate scrollHeight correctly.
+          [...allContentElements].reverse().forEach((content) => {
             const icon =
               content.previousElementSibling.querySelector(".wbs-toggle");
-            content.style.maxHeight = content.scrollHeight + "px";
             if (icon) icon.textContent = "-";
+            content.classList.add("expanded");
+            content.style.maxHeight = content.scrollHeight + "px";
           });
         } else {
+          // Collapse any order.
           allContentElements.forEach((content) => {
             const icon =
               content.previousElementSibling.querySelector(".wbs-toggle");
-            content.style.maxHeight = "0px";
-            if (icon) icon.textContent = "+";
+            if (content.classList.contains("expanded")) {
+              // Set height explicitly to start transition, then set to 0.
+              content.style.maxHeight = content.scrollHeight + "px";
+              requestAnimationFrame(() => {
+                content.classList.remove("expanded");
+                content.style.maxHeight = "0px";
+                if (icon) icon.textContent = "+";
+              });
+            }
           });
         }
+
         btn.dataset.state = isExpanding ? "expanded" : "collapsed";
         btn.textContent = isExpanding ? "Minimizar Tudo" : "Expandir Tudo";
       }
@@ -504,37 +514,45 @@
             });
           });
 
-        function updateParentHeights(element, change) {
-          let parent = element.parentElement.closest(".wbs-content");
-          while (parent) {
-            if (parent.style.maxHeight && parent.style.maxHeight !== "0px") {
-              const currentHeight = parseInt(parent.style.maxHeight, 10);
-              parent.style.maxHeight = `${currentHeight + change}px`;
-            }
-            parent = parent.parentElement.closest(".wbs-content");
-          }
-        }
-
+        // Listener for Toggling Individual Items
         dashboardOutput.addEventListener("click", (e) => {
           const toggleTitle = e.target.closest(".wbs-title");
           if (!toggleTitle) return;
 
           const content = toggleTitle.nextElementSibling;
           const icon = toggleTitle.querySelector(".wbs-toggle");
+          if (!content || !content.classList.contains("wbs-content")) return;
 
-          const isCurrentlyExpanded =
-            content.style.maxHeight && content.style.maxHeight !== "0px";
+          const isExpanded = content.classList.contains("expanded");
 
-          if (isCurrentlyExpanded) {
-            const heightToSubtract = content.scrollHeight;
-            updateParentHeights(content, -heightToSubtract);
-            content.style.maxHeight = "0px";
-            icon.textContent = "+";
+          if (isExpanded) {
+            // Start Collapse: Set max-height to a pixel value to start the transition.
+            content.style.maxHeight = content.scrollHeight + "px";
+            requestAnimationFrame(() => {
+              content.classList.remove("expanded");
+              content.style.maxHeight = "0px";
+              if (icon) icon.textContent = "+";
+            });
           } else {
-            const heightToAdd = content.scrollHeight;
-            content.style.maxHeight = `${heightToAdd}px`;
-            updateParentHeights(content, heightToAdd);
-            icon.textContent = "-";
+            // Start Expand
+            content.classList.add("expanded");
+            if (icon) icon.textContent = "-";
+            content.style.maxHeight = content.scrollHeight + "px";
+          }
+        });
+
+        // Listener for cleaning up after transitions end.
+        dashboardOutput.addEventListener("transitionend", (e) => {
+          if (
+            e.target.classList.contains("wbs-content") &&
+            e.propertyName === "max-height"
+          ) {
+            const content = e.target;
+            // If the element is expanded (max-height is not '0px'), set max-height to 'none'.
+            // This allows the element to grow dynamically if its children expand.
+            if (content.style.maxHeight !== "0px") {
+              content.style.maxHeight = "none";
+            }
           }
         });
 
