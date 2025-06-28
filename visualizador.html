@@ -5,112 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Visualizador de Tabelas P6</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-      @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
-      body {
-        font-family: "Inter", sans-serif;
-        background-color: #f0f2f5;
-        display: flex;
-        justify-content: center;
-        align-items: flex-start;
-        min-height: 100vh;
-        padding: 2rem;
-        box-sizing: border-box;
-      }
-      .container {
-        background-color: #ffffff;
-        padding: 2.5rem;
-        border-radius: 1rem;
-        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-        width: 100%;
-        max-width: 1000px;
-        text-align: center;
-      }
-      .controls-section {
-        margin-bottom: 2rem;
-        display: flex;
-        flex-wrap: wrap;
-        gap: 1rem;
-        justify-content: center;
-        align-items: center;
-      }
-      .controls-section label,
-      .controls-section select,
-      .controls-section input {
-        font-size: 1rem;
-        padding: 0.75rem 1rem;
-        border-radius: 0.5rem;
-        border: 1px solid #cbd5e1;
-        background-color: #f8fafc;
-      }
-      .controls-section select {
-        min-width: 150px;
-        cursor: pointer;
-        outline: none;
-        transition: border-color 0.3s ease;
-      }
-      .controls-section select:focus {
-        border-color: #6366f1;
-      }
-      .controls-section input[type="text"] {
-        flex-grow: 1;
-        max-width: 400px;
-        outline: none;
-        transition: border-color 0.3s ease;
-      }
-      .controls-section input[type="text"]:focus {
-        border-color: #6366f1;
-      }
-      .table-display-section {
-        margin-top: 2rem;
-        text-align: left;
-      }
-      table {
-        width: 100%;
-        border-collapse: collapse;
-        margin-bottom: 1.5rem;
-      }
-      th,
-      td {
-        border: 1px solid #e2e8f0;
-        padding: 0.75rem;
-        text-align: left;
-        font-size: 0.875rem;
-      }
-      th {
-        background-color: #f1f5f9;
-        font-weight: 600;
-        color: #334155;
-      }
-      tbody tr:nth-child(even) {
-        background-color: #f8fafc;
-      }
-      tbody tr:hover {
-        background-color: #e2e8f0;
-      }
-      .message-box {
-        background-color: #fff;
-        border: 1px solid #ccc;
-        padding: 15px;
-        margin-top: 20px;
-        border-radius: 8px;
-        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-        text-align: center;
-      }
-      .message-box.error {
-        border-color: #ef4444;
-        background-color: #fef2f2;
-        color: #ef4444;
-      }
-      .message-box.info {
-        border-color: #3b82f6;
-        background-color: #eff6ff;
-        color: #3b82f6;
-      }
-    </style>
+    <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <div class="container">
+    <div class="container" id="visualizador-container">
       <h1 class="text-4xl font-bold text-gray-800 mb-6">
         Visualizador de Tabelas P6
       </h1>
@@ -150,7 +48,11 @@
       </section>
     </div>
 
+    <script src="storage.js"></script>
+    <script src="utils.js"></script>
     <script>
+      insertHeader();
+
       const projectSelect = document.getElementById("project-select");
       const tableSelect = document.getElementById("table-select");
       const filterInput = document.getElementById("filter-input");
@@ -227,40 +129,14 @@
 
       function loadAllDataFromLocalStorage() {
         try {
-          allProjectsData = JSON.parse(
-            localStorage.getItem("allProjectsData") || "{}"
-          );
-          allTaskRsrcData = JSON.parse(
-            localStorage.getItem("allTaskRsrcData") || "[]"
-          );
+          allProjectsData = storage.getData(storage.APP_KEYS.PROJECTS_DATA_KEY);
+          allTaskRsrcData = storage.getData(storage.APP_KEYS.TASKRSRC_DATA_KEY);
+
           populateProjectSelect(allProjectsData);
 
           const projectIds = Object.keys(allProjectsData);
           if (projectIds.length > 0) {
-            let latestProjectId = null;
-            let latestRecalcDate = new Date(0);
-
-            for (const projId of projectIds) {
-              const projectData = allProjectsData[projId]["PROJECT"];
-              if (
-                projectData &&
-                projectData.rows.length > 0 &&
-                projectData.rows[0].last_recalc_date
-              ) {
-                const dateString = projectData.rows[0].last_recalc_date.replace(
-                  /(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2})/,
-                  "$1T$2:00"
-                );
-                const currentRecalcDate = new Date(dateString);
-                if (
-                  !isNaN(currentRecalcDate.getTime()) &&
-                  currentRecalcDate > latestRecalcDate
-                ) {
-                  latestRecalcDate = currentRecalcDate;
-                  latestProjectId = projId;
-                }
-              }
-            }
+            const latestProjectId = getLatestProjectId(allProjectsData);
 
             if (latestProjectId) {
               projectSelect.value = latestProjectId;
@@ -430,7 +306,8 @@
         renderTable();
       });
       filterInput.addEventListener("input", renderTable);
-      window.onload = loadAllDataFromLocalStorage;
+
+      loadAllDataFromLocalStorage();
     </script>
   </body>
 </html>

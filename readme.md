@@ -10,7 +10,7 @@ O objetivo deste sistema é transformar dados brutos de arquivos `.xer` em dashb
 
 O sistema é uma **aplicação 100% client-side**, o que significa que roda inteiramente no navegador do usuário sem depender de um servidor back-end.
 
-> **Persistência de Dados:** Todos os dados, tanto do projeto quanto das configurações, são armazenados no `localStorage` do navegador. Isso garante privacidade total (os dados nunca saem da máquina do usuário) e o funcionamento offline da aplicação após o primeiro carregamento.
+> **Persistência de Dados:** Todos os dados, tanto do projeto quanto das configurações, são gerenciados pelo módulo `storage.js`, que abstrai o uso do `localStorage` do navegador. Isso garante privacidade total (os dados nunca saem da máquina do usuário) e o funcionamento offline da aplicação após o primeiro carregamento.
 
 ### Fluxo de Trabalho Recomendado
 
@@ -20,6 +20,8 @@ O sistema é uma **aplicação 100% client-side**, o que significa que roda inte
 4.  **📦 Backup (`configuracao.html`):** O usuário exporta todos os dados e configurações para um arquivo `.json`, garantindo a segurança e portabilidade de suas análises.
 
 ## 📄 3. Detalhamento das Páginas e Funcionalidades
+
+Todas as páginas contam com uma **barra de navegação lateral**, fixa e responsiva, que é injetada dinamicamente pelo script `utils.js` para garantir uma experiência de usuário coesa.
 
 ### `index.html` (Painel Principal e Processador de Dados)
 
@@ -37,7 +39,7 @@ Centraliza todas as parametrizações da aplicação através de uma interface d
 - **Mapeamento de Atividades:** Permite criar **grupos lógicos de atividades**. Por exemplo, "Escavação Bloco A - Etapa 1" e "Escavação Bloco A - Etapa 2" podem ser agrupados como "Escavação Bloco A". A lógica impede que uma mesma atividade pertença a múltiplos grupos.
 - **Valores Personalizados:** Permite ao usuário inserir valores "Previsto" e "Realizado" que se **sobrepõem** aos do cronograma. Pode ser aplicado a atividades individuais ou a grupos. Ideal para registrar medições de campo (topografia, engenharia) que refletem o avanço real.
 - **Agrupamento e Ocultação:** Oferece controle granular sobre a exibição das atividades no dashboard de próximas semanas, permitindo focar em níveis hierárquicos específicos e ocultar itens de baixo impacto.
-- **Importar & Exportar:** Cria um backup (`.json`) com um snapshot completo de **todos os dados de projetos e configurações** salvas. Essencial para segurança e portabilidade.
+- **Importar & Exportar:** Utiliza o módulo `storage.js` para criar um backup (`.json`) com um snapshot completo de **todos os dados de projetos e configurações** salvas. Essencial para segurança e portabilidade.
 
 ### `proximas_semanas.html` (Dashboard de Próximas Semanas)
 
@@ -64,30 +66,32 @@ Ferramenta de utilidade para desenvolvedores e usuários avançados que precisam
 
 Esta seção detalha as implementações-chave que sustentam as funcionalidades do sistema.
 
-### 4.1. Processamento do `.XER` e Criação da Hierarquia Estável
+### 4.1. Camada de Abstração de Dados (`storage.js`)
+
+- **Objetivo:** Centralizar e abstrair toda a interação com o `localStorage`. Esta é a mudança arquitetural mais importante para a manutenibilidade do projeto.
+- **Benefícios:**
+
+  - **Ponto Único de Modificação:** Se quisermos migrar para `IndexedDB` ou uma API de nuvem no futuro, apenas `storage.js` precisa ser alterado.
+  - **Robustez:** A função `getData` lida com dados ausentes ou erros de parsing, retornando valores padrão seguros (`STORAGE_DEFAULTS`), o que previne erros no resto da aplicação.
+  - **Código Limpo:** As páginas da aplicação não se preocupam com `JSON.stringify` ou `JSON.parse`, apenas chamam métodos simples como `storage.getData()` e `storage.saveData()`.
+
+  ```javascript
+  // Exemplo de uso nas páginas
+  // Antes: const data = JSON.parse(localStorage.getItem('allProjectsData') || '{}');
+  // Agora:
+  const allProjectsData = storage.getData(storage.APP_KEYS.PROJECTS_DATA_KEY);
+  ```
+
+### 4.2. Processamento do `.XER` e Criação da Hierarquia Estável
 
 - **Função Principal:** `transformData()` em `index.html`.
 - **Problema:** Os IDs de WBS (`wbs_id`) no Primavera P6 são numéricos e podem mudar entre as versões do cronograma. Usá-los como referência direta levaria a inconsistências.
 - **Solução:** Foi criado um **ID Estável (`stable_wbs_id`)**.
-
   1.  O algoritmo primeiro mapeia todos os itens da WBS (`PROJWBS`) em um `Map` para acesso rápido.
   2.  Ele percorre recursivamente a árvore hierárquica de cada item da WBS, concatenando os nomes de cada nível para formar um caminho legível e único (ex: `"Projeto X > Área Y > Disciplina Z"`).
   3.  Este caminho se torna o `stable_wbs_id`, que é então usado em toda a aplicação como a chave primária para a hierarquia, garantindo consistência entre diferentes arquivos `.xer`.
 
-  ```javascript
-  // Pseudo-código da lógica de criação do ID estável
-  function generateStableWbsId(wbsItem, wbsMap) {
-    let path = [wbsItem.wbs_name];
-    let current = wbsItem;
-    while (current.parent_wbs_id && wbsMap.has(current.parent_wbs_id)) {
-      current = wbsMap.get(current.parent_wbs_id);
-      path.unshift(current.wbs_name);
-    }
-    return path.join(" > ");
-  }
-  ```
-
-### 4.2. Geração da Visão Hierárquica no Dashboard Semanal
+### 4.3. Geração da Visão Hierárquica no Dashboard Semanal
 
 - **Função Principal:** `buildGroupedTreeRecursive()` em `proximas_semanas.html`.
 - **Objetivo:** Montar a estrutura de árvore aninhada das atividades com base nos níveis de WBS que o usuário selecionou na configuração.
@@ -97,7 +101,7 @@ Esta seção detalha as implementações-chave que sustentam as funcionalidades 
   3.  Quando todos os níveis de agrupamento foram percorridos, a atividade é inserida na folha correta da árvore. Se um nível intermediário não existir, ele é criado dinamicamente.
   4.  O resultado é um objeto JavaScript aninhado que espelha a estrutura hierárquica desejada, pronto para ser renderizado em HTML.
 
-### 4.3. Agregação de Dados para Grupos de Atividades
+### 4.4. Agregação de Dados para Grupos de Atividades
 
 - **Função Principal:** `displayGroupAnalysis()` em `analise_atividade.html`.
 - **Desafio:** Ao analisar um grupo, é preciso consolidar as informações de múltiplas atividades individuais em uma única visão coerente.
@@ -109,14 +113,12 @@ Esta seção detalha as implementações-chave que sustentam as funcionalidades 
     - `act_start_date`: Usa a data de início real **mais antiga**.
     - `aggr_end_date`: Usa a data de término real **mais tardia** se todas as atividades tiverem terminado. Caso contrário, usa a data de término prevista (tendência) **mais tardia** para refletir a projeção atual.
 
-### 4.4. Gerenciamento de Configuração Modular
+### 4.5. Gerenciamento de Componentes de UI (`utils.js`)
 
-- **Objeto Principal:** `CONFIG_MODULES` em `configuracao.html`.
-- **Design Pattern:** Para evitar um código monolítico e complexo, a lógica de cada modal de configuração foi encapsulada em um "módulo" dentro do objeto `CONFIG_MODULES`.
-- **Estrutura do Módulo:** Cada módulo define:
-  - `title` e `subtitle`: Textos para o cabeçalho do modal.
-  - `setup()`: Uma função que gera e retorna o HTML do corpo do modal.
-  - `save()`: A função que é executada quando o botão "Salvar" é clicado.
-  - `headerAction` (opcional): Define um botão de ação extra no cabeçalho do modal (ex: "Adicionar Novo Grupo").
-
-> Esta abordagem torna o código mais limpo, fácil de manter e escalável. Adicionar uma nova opção de configuração se resume a adicionar um novo objeto a `CONFIG_MODULES` sem impactar os existentes.
+- **Função Principal:** `insertHeader()`
+- **Design:** Para evitar a repetição de código HTML e JavaScript, a barra de navegação é gerada e injetada dinamicamente em cada página.
+- **Implementação:**
+  - A função `insertHeader()` constrói o HTML da barra de navegação lateral.
+  - Ela detecta a página atual (`window.location.pathname`) para aplicar a classe `active` ao link correto.
+  - Ela anexa os event listeners necessários para a funcionalidade de expansão/recolhimento e para o menu mobile.
+  - Chamar esta única função no início de cada página garante uma UI consistente e centraliza a lógica de navegação.

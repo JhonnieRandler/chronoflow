@@ -6,126 +6,10 @@
     <title>Acompanhamento de Projetos P6</title>
     <!-- Incluindo Tailwind CSS para estilização fácil e responsiva -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-      @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
-      body {
-        font-family: "Inter", sans-serif;
-        background-color: #f0f2f5;
-        display: flex;
-        justify-content: center;
-        align-items: flex-start;
-        min-height: 100vh;
-        padding: 2rem;
-        box-sizing: border-box;
-      }
-      .container {
-        background-color: #ffffff;
-        padding: 2.5rem;
-        border-radius: 1rem;
-        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-        width: 100%;
-        max-width: 900px;
-        text-align: center;
-      }
-      .drop-area {
-        border: 3px dashed #cbd5e1;
-        background-color: #f8fafc;
-        border-radius: 0.75rem;
-        padding: 3rem 2rem;
-        text-align: center;
-        transition: background-color 0.3s ease, border-color 0.3s ease;
-        cursor: pointer;
-        margin-bottom: 1.5rem;
-      }
-      .drop-area.highlight {
-        background-color: #eef2ff;
-        border-color: #6366f1;
-      }
-      .file-input-label {
-        display: inline-block;
-        background-color: #6366f1;
-        color: white;
-        padding: 0.75rem 1.5rem;
-        border-radius: 0.5rem;
-        cursor: pointer;
-        transition: background-color 0.3s ease;
-        font-weight: 500;
-      }
-      .file-input-label:hover {
-        background-color: #4f46e5;
-      }
-      input[type="file"] {
-        display: none;
-      }
-      .file-info {
-        margin-top: 1.5rem;
-        font-size: 1.125rem;
-        color: #4b5563;
-        font-weight: 500;
-      }
-      .dashboard-section {
-        margin-top: 3rem;
-        border-top: 1px solid #e5e7eb;
-        padding-top: 2rem;
-        text-align: left;
-      }
-      .message-box {
-        background-color: #fff;
-        border: 1px solid #ccc;
-        padding: 15px;
-        margin-top: 20px;
-        border-radius: 8px;
-        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-        text-align: center;
-      }
-      .message-box.error {
-        border-color: #ef4444;
-        background-color: #fef2f2;
-        color: #ef4444;
-      }
-      .message-box.info {
-        border-color: #3b82f6;
-        background-color: #eff6ff;
-        color: #3b82f6;
-      }
-      .nav-button {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        background-color: #f8fafc;
-        border: 1px solid #e2e8f0;
-        border-radius: 0.75rem;
-        padding: 1.5rem;
-        text-decoration: none;
-        color: #1e293b;
-        transition: transform 0.2s ease, box-shadow 0.2s ease,
-          border-color 0.2s ease;
-        text-align: center;
-      }
-      .nav-button:hover {
-        transform: translateY(-4px);
-        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
-        border-color: #c7d2fe;
-      }
-      .nav-button svg {
-        margin-bottom: 0.75rem;
-        color: #4f46e5;
-      }
-      .project-list-item {
-        background-color: #f1f5f9;
-        padding: 0.75rem 1.25rem;
-        border-radius: 0.5rem;
-        margin-bottom: 0.5rem;
-        font-size: 0.9rem;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-      }
-    </style>
+    <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <div class="container">
+    <div class="container" id="index-container">
       <h1 class="text-4xl font-bold text-gray-800 mb-6">Painel de Controle</h1>
       <p class="text-gray-600 mb-8">
         Envie seu arquivo .xer do Primavera P6 para carregar ou atualizar as
@@ -158,16 +42,16 @@
       </section>
     </div>
 
+    <script src="storage.js"></script>
+    <script src="utils.js"></script>
     <script>
+      insertHeader();
+
       const dropArea = document.getElementById("drop-area");
       const fileElem = document.getElementById("fileElem");
       const fileDisplay = document.getElementById("file-display");
       const fileNameSpan = document.getElementById("file-name");
       const dashboardOutput = document.getElementById("dashboard-output");
-
-      const ALL_PROJECTS_DATA_KEY = "allProjectsData";
-      const ALL_TASKRSRC_DATA_KEY = "allTaskRsrcData";
-      const WEEKS_DATA_KEY = "projectWeeksRangeData";
 
       const OVERWRITE_TABLE_NAMES = [
         "PROJECT",
@@ -259,29 +143,6 @@
         handleFiles(e.target.files);
       });
 
-      function formatBrazilianDate(d) {
-        if (!d) return "N/A";
-        const datePart = d.split(" ")[0];
-        const timePart = d.split(" ")[1] || "";
-        const [y, m, day] = datePart.split("-");
-        let formattedDate = y && m && day ? `${day}/${m}/${y}` : d;
-        if (timePart) {
-          formattedDate += ` ${timePart.substring(0, 5)}`;
-        }
-        return formattedDate;
-      }
-
-      function getWeekForDate(d, weeksMapping) {
-        if (!d || !weeksMapping || weeksMapping.length === 0) return null;
-        const checkDate = new Date(d.replace(" ", "T"));
-        const foundWeek = weeksMapping.find((week) => {
-          const startDate = new Date(week.Data_Inicio + "T00:00:00");
-          const endDate = new Date(week.Data_Fim + "T23:59:59");
-          return checkDate >= startDate && checkDate <= endDate;
-        });
-        return foundWeek ? foundWeek.Semana : null;
-      }
-
       async function handleFiles(files) {
         if (files.length === 0) return;
         const file = files[0];
@@ -304,12 +165,14 @@
               parsedTables,
               currentProjectId
             );
-            let allProjectsData = JSON.parse(
-              localStorage.getItem(ALL_PROJECTS_DATA_KEY) || "{}"
+
+            let allProjectsData = storage.getData(
+              storage.APP_KEYS.PROJECTS_DATA_KEY
             );
-            let allTaskRsrcData = JSON.parse(
-              localStorage.getItem(ALL_TASKRSRC_DATA_KEY) || "[]"
+            let allTaskRsrcData = storage.getData(
+              storage.APP_KEYS.TASKRSRC_DATA_KEY
             );
+
             const currentProjectVersionTables = {};
             OVERWRITE_TABLE_NAMES.forEach((tableName) => {
               if (transformedTables[tableName]) {
@@ -319,7 +182,9 @@
                 );
               }
             });
+
             allProjectsData[currentProjectId] = currentProjectVersionTables;
+
             if (transformedTables["TASKRSRC"]?.rows.length > 0) {
               allTaskRsrcData = allTaskRsrcData.filter(
                 (item) => item.proj_id !== currentProjectId
@@ -330,14 +195,16 @@
               );
               allTaskRsrcData.push(...filteredTaskRsrcRows);
             }
-            localStorage.setItem(
-              ALL_PROJECTS_DATA_KEY,
-              JSON.stringify(allProjectsData)
+
+            storage.saveData(
+              storage.APP_KEYS.PROJECTS_DATA_KEY,
+              allProjectsData
             );
-            localStorage.setItem(
-              ALL_TASKRSRC_DATA_KEY,
-              JSON.stringify(allTaskRsrcData)
+            storage.saveData(
+              storage.APP_KEYS.TASKRSRC_DATA_KEY,
+              allTaskRsrcData
             );
+
             loadDashboard();
           } catch (error) {
             console.error("Erro ao processar ou salvar o arquivo:", error);
@@ -595,45 +462,21 @@
           })
           .join("");
 
-        const navigationHtml = `
-            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mt-8">
-              <a href="configuracao.html" class="nav-button">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                <span class="font-semibold">Configurações</span>
-              </a>
-              <a href="proximas_semanas.html" class="nav-button">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                <span class="font-semibold">Próximas Semanas</span>
-              </a>
-              <a href="analise_atividade.html" class="nav-button">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
-                <span class="font-semibold">Análise Detalhada</span>
-              </a>
-              <a href="visualizador.html" class="nav-button">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-                <span class="font-semibold">Visualizador de Dados</span>
-              </a>
-            </div>
-        `;
-
         dashboardOutput.innerHTML = `
             <div>
               <h2 class="text-2xl font-bold text-gray-800 mb-4">Projetos Carregados</h2>
               <div class="space-y-2">${projectsListHtml}</div>
-              <h2 class="text-2xl font-bold text-gray-800 mt-8 mb-4">Navegação</h2>
-              ${navigationHtml}
             </div>
         `;
       }
 
       function loadDashboard() {
         try {
-          const allProjectsData = JSON.parse(
-            localStorage.getItem(ALL_PROJECTS_DATA_KEY) || "{}"
+          const allProjectsData = storage.getData(
+            storage.APP_KEYS.PROJECTS_DATA_KEY
           );
-          const weeksMapping = JSON.parse(
-            localStorage.getItem(WEEKS_DATA_KEY) || "[]"
-          );
+          const weeksMapping = storage.getData(storage.APP_KEYS.WEEKS_DATA_KEY);
+
           const projectIds = Object.keys(allProjectsData);
           if (projectIds.length > 0) {
             displayDashboard(allProjectsData, weeksMapping);
@@ -643,8 +486,11 @@
                 "Dados carregados do armazenamento local.";
             }
           } else {
-            dashboardOutput.innerHTML =
-              '<p class="message-box info">Nenhuma informação de projeto carregada. Por favor, envie um arquivo .xer.</p>';
+            dashboardOutput.innerHTML = `
+              <div>
+                <p class="message-box info">Nenhuma informação de projeto carregada. Por favor, envie um arquivo .xer.</p>
+              </div>
+            `;
           }
         } catch (error) {
           console.error("Erro ao carregar o dashboard:", error);
@@ -652,7 +498,7 @@
         }
       }
 
-      window.onload = loadDashboard;
+      loadDashboard();
     </script>
   </body>
 </html>

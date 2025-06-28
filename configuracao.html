@@ -11,131 +11,10 @@
       rel="stylesheet"
     />
     <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
-    <style>
-      @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
-      body {
-        font-family: "Inter", sans-serif;
-        background-color: #f1f5f9;
-      }
-      .modal-overlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background-color: rgba(0, 0, 0, 0.5);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 1000;
-        opacity: 0;
-        visibility: hidden;
-        transition: opacity 0.3s ease, visibility 0.3s ease;
-      }
-      .modal-overlay.active {
-        opacity: 1;
-        visibility: visible;
-      }
-      .modal-content {
-        background-color: white;
-        border-radius: 0.75rem;
-        width: 90%;
-        max-width: 700px;
-        max-height: 90vh;
-        transform: scale(0.95);
-        transition: transform 0.3s ease;
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
-      }
-      .modal-overlay.active .modal-content {
-        transform: scale(1);
-      }
-      #modal-header,
-      #modal-footer {
-        flex-shrink: 0;
-      }
-      #modal-body {
-        overflow-y: auto;
-        flex-grow: 1;
-      }
-      .config-card {
-        background-color: #ffffff;
-        padding: 1.5rem;
-        border-radius: 0.75rem;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-        display: flex;
-        align-items: center;
-        gap: 1.5rem;
-        cursor: pointer;
-        transition: transform 0.2s ease, box-shadow 0.2s ease;
-      }
-      .config-card:hover {
-        transform: translateY(-4px);
-        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
-      }
-      .config-icon {
-        flex-shrink: 0;
-        width: 3.5rem;
-        height: 3.5rem;
-        border-radius: 9999px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background-color: #e0e7ff;
-        color: #4338ca;
-      }
-      .message-box {
-        text-align: center;
-        padding: 1rem;
-        border-radius: 0.5rem;
-      }
-      .message-box.error {
-        background-color: #fef2f2;
-        color: #b91c1c;
-        border: 1px solid #fecaca;
-      }
-      .message-box.success {
-        background-color: #f0fdf4;
-        color: #166534;
-        border: 1px solid #bbf7d0;
-      }
-      .ts-control {
-        border-radius: 0.375rem !important;
-        border: 1px solid #d1d5db !important;
-        padding: 0.5rem 0.75rem !important;
-      }
-      .ts-control .item[data-value] {
-        background-color: #4f46e5;
-        color: white;
-      }
-      .table-container {
-        border: 1px solid #e2e8f0;
-        border-radius: 0.5rem;
-        overflow: hidden;
-      }
-      table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 0.875rem;
-      }
-      th,
-      td {
-        padding: 0.75rem 1rem;
-        text-align: left;
-        border-bottom: 1px solid #e2e8f0;
-      }
-      th {
-        background-color: #f8fafc;
-        font-weight: 600;
-        color: #475569;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-      }
-    </style>
+    <link rel="stylesheet" href="styles.css" />
   </head>
-  <body class="p-4 sm:p-6 md:p-8">
-    <div class="container mx-auto max-w-4xl">
+  <body id="config-body">
+    <div class="config-page-container">
       <h1 class="text-3xl font-bold text-gray-800 mb-2">
         Painel de Configurações
       </h1>
@@ -370,28 +249,10 @@
         </div>
       </div>
     </div>
-
+    <script src="storage.js"></script>
+    <script src="utils.js"></script>
     <script>
-      const ALL_DATA_KEYS = [
-        "allProjectsData",
-        "allTaskRsrcData",
-        "projectWeeksRangeData",
-        "mainProgressResource",
-        "weeksViewGroupingConfig",
-        "weeksViewHiddenActivities",
-        "activityMapping",
-        "customActivityValues",
-      ];
-      const [
-        PROJECTS_DATA_KEY,
-        TASKRSRC_DATA_KEY,
-        WEEKS_DATA_KEY,
-        MAIN_RESOURCE_KEY,
-        WEEKS_VIEW_GROUPING_KEY,
-        WEEKS_VIEW_HIDDEN_ACTIVITIES_KEY,
-        ACTIVITY_MAPPING_KEY,
-        CUSTOM_VALUES_KEY,
-      ] = ALL_DATA_KEYS;
+      insertHeader();
 
       let latestProjectData = null;
       let activeTomSelects = [];
@@ -417,32 +278,15 @@
 
       function getLatestProject() {
         if (latestProjectData) return latestProjectData;
-        const allProjectsData = JSON.parse(
-          localStorage.getItem(PROJECTS_DATA_KEY) || "{}"
+        const allProjectsData = storage.getData(
+          storage.APP_KEYS.PROJECTS_DATA_KEY
         );
-        const projectIds = Object.keys(allProjectsData);
-        if (projectIds.length === 0) return null;
-        const latestProjectId = projectIds.reduce((latest, current) => {
-          const latestDateStr =
-            allProjectsData[latest]?.PROJECT?.rows[0]?.last_recalc_date;
-          const currentDateStr =
-            allProjectsData[current]?.PROJECT?.rows[0]?.last_recalc_date;
-          if (!currentDateStr) return latest;
-          if (!latestDateStr) return current;
-          return new Date(currentDateStr.replace(" ", "T")) >
-            new Date(latestDateStr.replace(" ", "T"))
-            ? current
-            : latest;
-        });
-        latestProjectData = allProjectsData[latestProjectId];
-        return latestProjectData;
-      }
-      function formatNumberBR(num) {
-        if (num === null || num === undefined) return "-";
-        return Number(num).toLocaleString("pt-BR", {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        });
+        const latestProjectId = getLatestProjectId(allProjectsData);
+        if (latestProjectId) {
+          latestProjectData = allProjectsData[latestProjectId];
+          return latestProjectData;
+        }
+        return null;
       }
 
       function openModal(module) {
@@ -450,6 +294,11 @@
         modalSubtitle.textContent = module.subtitle || "";
         modalBody.innerHTML = module.setup();
         modalHeaderActions.innerHTML = "";
+
+        if (module.needsMoreHeight) {
+          modal.classList.add("modal-large");
+        }
+
         if (module.headerAction) {
           const btn = document.createElement("button");
           btn.id = module.headerAction.id;
@@ -469,12 +318,13 @@
 
       function closeModal() {
         modal.classList.remove("active");
+        modal.classList.remove("modal-large");
         fileToImport = null;
       }
 
       function renderActivityMappingTable() {
-        let savedMapping = JSON.parse(
-          localStorage.getItem(ACTIVITY_MAPPING_KEY) || "[]"
+        let savedMapping = storage.getData(
+          storage.APP_KEYS.ACTIVITY_MAPPING_KEY
         );
         modalSaveBtn.style.display = "none";
         modalSubtitle.textContent =
@@ -512,8 +362,8 @@
       }
 
       function renderGroupEditForm(groupName = null) {
-        const savedMapping = JSON.parse(
-          localStorage.getItem(ACTIVITY_MAPPING_KEY) || "[]"
+        const savedMapping = storage.getData(
+          storage.APP_KEYS.ACTIVITY_MAPPING_KEY
         );
         const group = groupName
           ? savedMapping.find((g) => g.groupName === groupName)
@@ -552,9 +402,7 @@
       }
 
       function renderCustomValuesTable() {
-        let savedValues = JSON.parse(
-          localStorage.getItem(CUSTOM_VALUES_KEY) || "[]"
-        );
+        let savedValues = storage.getData(storage.APP_KEYS.CUSTOM_VALUES_KEY);
         modalSaveBtn.style.display = "none";
         modalSubtitle.textContent =
           "Gerencie valores que sobrepõem os dados do cronograma.";
@@ -566,12 +414,12 @@
             id: t.task_code,
             name: `${t.task_code} - ${t.task_name}`,
           })),
-          ...JSON.parse(localStorage.getItem(ACTIVITY_MAPPING_KEY) || "[]").map(
-            (g) => ({
+          ...storage
+            .getData(storage.APP_KEYS.ACTIVITY_MAPPING_KEY)
+            .map((g) => ({
               id: `group::${g.groupName}`,
               name: `[Grupo] ${g.groupName}`,
-            })
-          ),
+            })),
         ];
         const itemsMap = new Map(allItems.map((i) => [i.id, i.name]));
         savedValues.forEach(
@@ -615,9 +463,7 @@
       }
 
       function renderCustomValueEditForm(id = null) {
-        const savedValues = JSON.parse(
-          localStorage.getItem(CUSTOM_VALUES_KEY) || "[]"
-        );
+        const savedValues = storage.getData(storage.APP_KEYS.CUSTOM_VALUES_KEY);
         const value = id
           ? savedValues.find((v) => v.id === id)
           : { id: null, planned: "", actual: "" };
@@ -640,12 +486,12 @@
           value: t.task_code,
           text: `${t.task_code} - ${t.task_name}`,
         }));
-        const allGroups = JSON.parse(
-          localStorage.getItem(ACTIVITY_MAPPING_KEY) || "[]"
-        ).map((g) => ({
-          value: `group::${g.groupName}`,
-          text: `[Grupo] ${g.groupName}`,
-        }));
+        const allGroups = storage
+          .getData(storage.APP_KEYS.ACTIVITY_MAPPING_KEY)
+          .map((g) => ({
+            value: `group::${g.groupName}`,
+            text: `[Grupo] ${g.groupName}`,
+          }));
         const allOptions = [...allTasks, ...allGroups];
         const availableOptions = allOptions
           .filter((opt) => !usedValueIds.has(opt.value))
@@ -673,8 +519,8 @@
           showMessage("Um grupo deve ter pelo menos 2 atividades.", "error");
           return;
         }
-        let savedMapping = JSON.parse(
-          localStorage.getItem(ACTIVITY_MAPPING_KEY) || "[]"
+        let savedMapping = storage.getData(
+          storage.APP_KEYS.ACTIVITY_MAPPING_KEY
         );
         const newGroup = { groupName, taskCodes };
         if (currentEditingId !== null) {
@@ -685,26 +531,20 @@
         } else {
           savedMapping.push(newGroup);
         }
-        localStorage.setItem(
-          ACTIVITY_MAPPING_KEY,
-          JSON.stringify(savedMapping)
-        );
+        storage.saveData(storage.APP_KEYS.ACTIVITY_MAPPING_KEY, savedMapping);
         showMessage("Grupo salvo com sucesso!", "success");
         openModal(CONFIG_MODULES["activity-mapping"]);
         renderActivityMappingTable();
       }
       function deleteGroup(groupName) {
         if (confirm(`Tem certeza que deseja excluir o grupo "${groupName}"?`)) {
-          let savedMapping = JSON.parse(
-            localStorage.getItem(ACTIVITY_MAPPING_KEY) || "[]"
+          let savedMapping = storage.getData(
+            storage.APP_KEYS.ACTIVITY_MAPPING_KEY
           );
           const newMapping = savedMapping.filter(
             (g) => g.groupName !== groupName
           );
-          localStorage.setItem(
-            ACTIVITY_MAPPING_KEY,
-            JSON.stringify(newMapping)
-          );
+          storage.saveData(storage.APP_KEYS.ACTIVITY_MAPPING_KEY, newMapping);
           showMessage("Grupo excluído.", "success");
           renderActivityMappingTable();
         }
@@ -731,9 +571,7 @@
           return;
         }
 
-        let savedValues = JSON.parse(
-          localStorage.getItem(CUSTOM_VALUES_KEY) || "[]"
-        );
+        let savedValues = storage.getData(storage.APP_KEYS.CUSTOM_VALUES_KEY);
         const newValue = {
           id: selectedId,
           planned: plannedVal.trim() !== "" ? parseFloat(plannedVal) : null,
@@ -749,7 +587,7 @@
         } else {
           savedValues.push(newValue);
         }
-        localStorage.setItem(CUSTOM_VALUES_KEY, JSON.stringify(savedValues));
+        storage.saveData(storage.APP_KEYS.CUSTOM_VALUES_KEY, savedValues);
         showMessage("Valor personalizado salvo!", "success");
         openModal(CONFIG_MODULES["custom-values"]);
         renderCustomValuesTable();
@@ -758,11 +596,9 @@
         if (
           confirm("Tem certeza que deseja excluir este valor personalizado?")
         ) {
-          let savedValues = JSON.parse(
-            localStorage.getItem(CUSTOM_VALUES_KEY) || "[]"
-          );
+          let savedValues = storage.getData(storage.APP_KEYS.CUSTOM_VALUES_KEY);
           const newValues = savedValues.filter((v) => v.id !== id);
-          localStorage.setItem(CUSTOM_VALUES_KEY, JSON.stringify(newValues));
+          storage.saveData(storage.APP_KEYS.CUSTOM_VALUES_KEY, newValues);
           showMessage("Valor excluído.", "success");
           renderCustomValuesTable();
         }
@@ -829,7 +665,7 @@
               Data_Inicio: w.Data_Inicio.toISOString().split("T")[0],
               Data_Fim: w.Data_Fim.toISOString().split("T")[0],
             }));
-            localStorage.setItem(WEEKS_DATA_KEY, JSON.stringify(finalData));
+            storage.saveData(storage.APP_KEYS.WEEKS_DATA_KEY, finalData);
             showMessage("Mapeamento de semanas salvo com sucesso!", "success");
           } catch (err) {
             console.error(err);
@@ -863,7 +699,9 @@
             const resources = getLatestProject()?.RSRC?.rows || [];
             if (resources.length === 0)
               return "<p>Nenhum recurso encontrado. Carregue um arquivo .xer primeiro.</p>";
-            const savedResource = localStorage.getItem(MAIN_RESOURCE_KEY) || "";
+            const savedResource = storage.getData(
+              storage.APP_KEYS.MAIN_RESOURCE_KEY
+            );
             const options = resources
               .map(
                 (r) =>
@@ -877,7 +715,10 @@
           save: () => {
             const select = document.getElementById("modal-resource-select");
             if (select && select.value) {
-              localStorage.setItem(MAIN_RESOURCE_KEY, select.value);
+              storage.saveData(
+                storage.APP_KEYS.MAIN_RESOURCE_KEY,
+                select.value
+              );
               showMessage("Recurso salvo!", "success");
             } else {
               showMessage("Nenhum recurso selecionado.", "error");
@@ -896,8 +737,8 @@
               0,
               ...wbsHierarchy.map((w) => parseInt(w.level, 10))
             );
-            const savedLevels = JSON.parse(
-              localStorage.getItem(WEEKS_VIEW_GROUPING_KEY) || "[]"
+            const savedLevels = storage.getData(
+              storage.APP_KEYS.WEEKS_VIEW_GROUPING_KEY
             );
             let checkboxesHtml = '<div class="grid grid-cols-4 gap-2">';
             for (let i = 1; i <= maxLevel; i++) {
@@ -915,9 +756,9 @@
               .forEach((cb) => {
                 selectedLevels.push(parseInt(cb.value));
               });
-            localStorage.setItem(
-              WEEKS_VIEW_GROUPING_KEY,
-              JSON.stringify(selectedLevels.sort((a, b) => a - b))
+            storage.saveData(
+              storage.APP_KEYS.WEEKS_VIEW_GROUPING_KEY,
+              selectedLevels.sort((a, b) => a - b)
             );
             showMessage("Agrupamento salvo com sucesso!", "success");
           },
@@ -926,14 +767,15 @@
           title: "Ocultar Atividades",
           subtitle:
             "Atividades selecionadas não aparecerão no dashboard de próximas semanas.",
+          needsMoreHeight: true,
           setup: () =>
             `<select id="hidden-activities-select" multiple placeholder="Busque por código ou nome..."></select>`,
           save: () => {
             const tomSelect = activeTomSelects[0];
             if (tomSelect) {
-              localStorage.setItem(
-                WEEKS_VIEW_HIDDEN_ACTIVITIES_KEY,
-                JSON.stringify(tomSelect.getValue())
+              storage.saveData(
+                storage.APP_KEYS.WEEKS_VIEW_HIDDEN_ACTIVITIES_KEY,
+                tomSelect.getValue()
               );
               showMessage("Lista salva!", "success");
             }
@@ -941,6 +783,7 @@
         },
         "activity-mapping": {
           title: "Mapeamento de Atividades",
+          needsMoreHeight: true,
           headerAction: {
             id: "add-new-group-btn",
             icon: `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" /></svg>`,
@@ -951,6 +794,7 @@
         },
         "custom-values": {
           title: "Valores Personalizados",
+          needsMoreHeight: true,
           headerAction: {
             id: "add-custom-value-btn",
             icon: `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" /></svg>`,
@@ -983,13 +827,7 @@
               reader.onload = function (e) {
                 try {
                   const data = JSON.parse(e.target.result);
-                  let importedKeys = 0;
-                  ALL_DATA_KEYS.forEach((key) => {
-                    if (data[key]) {
-                      localStorage.setItem(key, data[key]);
-                      importedKeys++;
-                    }
-                  });
+                  const importedKeys = storage.importAllData(data);
                   if (importedKeys > 0) {
                     showMessage(
                       "Dados importados com sucesso! A página será recarregada.",
@@ -1017,7 +855,7 @@
       };
 
       // --- Inicialização da Página e Event Listeners ---
-      window.onload = () => {
+      (() => {
         getLatestProject();
         const cardConfigs = {
           "config-weeks": "weeks",
@@ -1104,9 +942,8 @@
                     plugins: ["remove_button"],
                   });
                   tomSelect.setValue(
-                    JSON.parse(
-                      localStorage.getItem(WEEKS_VIEW_HIDDEN_ACTIVITIES_KEY) ||
-                        "[]"
+                    storage.getData(
+                      storage.APP_KEYS.WEEKS_VIEW_HIDDEN_ACTIVITIES_KEY
                     )
                   );
                   activeTomSelects.push(tomSelect);
@@ -1118,11 +955,7 @@
               } else if (moduleName === "backup") {
                 modalSaveBtn.textContent = "Importar Agora";
                 document.getElementById("export-btn").onclick = () => {
-                  const backupData = {};
-                  ALL_DATA_KEYS.forEach((key) => {
-                    const data = localStorage.getItem(key);
-                    if (data) backupData[key] = data;
-                  });
+                  const backupData = storage.exportAllData();
                   const blob = new Blob([JSON.stringify(backupData, null, 2)], {
                     type: "application/json",
                   });
@@ -1161,7 +994,13 @@
         document
           .getElementById("modal-cancel-btn")
           .addEventListener("click", closeModal);
-      };
+
+        window.addEventListener("keydown", (e) => {
+          if (e.key === "Escape" && modal.classList.contains("active")) {
+            closeModal();
+          }
+        });
+      })();
     </script>
   </body>
 </html>
