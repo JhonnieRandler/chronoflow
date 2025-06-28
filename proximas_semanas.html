@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dashboard - Próximas Semanas</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+      body {
+        font-family: "Inter", sans-serif;
+        background-color: #f0f2f5;
+        padding: 2rem;
+      }
+      .main-container {
+        max-width: 80vw;
+        margin: auto;
+      }
+      .card {
+        background-color: #ffffff;
+        padding: 1.5rem;
+        border-radius: 0.75rem;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        margin-bottom: 1.5rem;
+      }
+      .carousel-container {
+        position: relative;
+      }
+      .week-card {
+        background-color: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 0.75rem;
+        padding: 2rem;
+        min-height: 500px;
+      }
+      .week-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 2px solid #4f46e5;
+        padding-bottom: 0.75rem;
+      }
+      .week-card-header h3 {
+        font-size: 1.75rem;
+      }
+      .nav-button {
+        position: fixed;
+        top: 50%;
+        transform: translateY(-50%);
+        background-color: white;
+        border-radius: 9999px;
+        width: 3rem;
+        height: 3rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+        cursor: pointer;
+        transition: background-color 0.2s, transform 0.2s;
+        z-index: 10;
+      }
+      .nav-button:hover {
+        background-color: #f1f5f9;
+        transform: translateY(-50%) scale(1.1);
+      }
+      .nav-button:disabled {
+        cursor: not-allowed;
+        opacity: 0.4;
+        transform: translateY(-50%) scale(1);
+      }
+      .prev-btn {
+        left: 2rem;
+      }
+      .next-btn {
+        right: 2rem;
+      }
+
+      .week-indicators {
+        text-align: center;
+        margin-top: 1.5rem;
+      }
+      .indicator-dot {
+        height: 0.75rem;
+        width: 0.75rem;
+        margin: 0 0.25rem;
+        background-color: #d1d5db;
+        border-radius: 9999px;
+        display: inline-block;
+        transition: background-color 0.3s ease;
+        cursor: pointer;
+      }
+      .indicator-dot.active {
+        background-color: #4f46e5;
+      }
+      .wbs-group {
+        margin-top: 1rem;
+        padding-left: 1rem;
+        border-left: 2px solid #e5e7eb;
+      }
+      .wbs-title {
+        font-weight: 600;
+        color: #1e293b;
+        margin-bottom: 0.5rem;
+        background-color: #f3f4f6;
+        padding: 0.5rem;
+        border-radius: 0.25rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        cursor: pointer;
+      }
+      .item-entry {
+        border-top: 1px solid #e2e8f0;
+        padding: 0.75rem 0.5rem;
+      }
+      .item-entry.has-tooltip {
+        cursor: help;
+        background-image: linear-gradient(to top, #fffbeb 0%, #ffffff 20%);
+      }
+      .wbs-group .item-list .item-entry:first-child {
+        border-top: none;
+      }
+      .tag {
+        font-size: 0.75rem;
+        font-weight: 600;
+        padding: 0.125rem 0.5rem;
+        border-radius: 9999px;
+        margin-left: 0.25rem;
+      }
+      .tag-start {
+        background-color: #dcfce7;
+        color: #166534;
+      }
+      .tag-end {
+        background-color: #fee2e2;
+        color: #991b1b;
+      }
+      .message-box {
+        text-align: center;
+        padding: 2rem;
+        border-radius: 0.5rem;
+        background-color: #eff6ff;
+        color: #3b82f6;
+        border: 1px solid #bfdbfe;
+      }
+      .wbs-content {
+        overflow: hidden;
+        transition: max-height 0.5s ease-in-out;
+      }
+      .filter-btn {
+        padding: 0.5rem 1rem;
+        border-radius: 9999px;
+        font-weight: 500;
+        font-size: 0.875rem;
+        border: 1px solid #e2e8f0;
+        background-color: #ffffff;
+        color: #475569;
+        transition: background-color 0.2s, color 0.2s, border-color 0.2s;
+      }
+      .filter-btn:hover {
+        background-color: #f1f5f9;
+      }
+      .filter-btn.active {
+        background-color: #4f46e5;
+        color: #ffffff;
+        border-color: #4f46e5;
+      }
+      /* Estilo do Tooltip */
+      .tooltip {
+        position: relative;
+      }
+      .tooltip::after {
+        content: attr(data-tooltip);
+        position: absolute;
+        bottom: 105%;
+        left: 50%;
+        transform: translateX(-50%);
+        background-color: #1f2937;
+        color: #ffffff;
+        padding: 0.5rem 0.75rem;
+        border-radius: 0.375rem;
+        font-size: 0.875rem;
+        font-weight: 500;
+        white-space: nowrap;
+        z-index: 20;
+        visibility: hidden;
+        opacity: 0;
+        transition: opacity 0.2s ease-in-out;
+        pointer-events: none;
+      }
+      .tooltip:hover::after {
+        visibility: visible;
+        opacity: 1;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="main-container">
+      <div class="card">
+        <div class="flex flex-wrap justify-between items-center gap-4">
+          <div>
+            <h1 class="text-3xl font-bold text-gray-800 mb-2">
+              Atividades das Próximas 6 Semanas
+            </h1>
+            <p id="grouping-info" class="text-gray-600">
+              Carregando configuração de agrupamento...
+            </p>
+          </div>
+          <div
+            id="filter-controls"
+            class="flex items-center gap-2 p-1 bg-gray-100 rounded-full"
+          >
+            <button class="filter-btn active" data-filter="all">Todos</button>
+            <button class="filter-btn" data-filter="start">Início</button>
+            <button class="filter-btn" data-filter="end">Fim</button>
+            <button class="filter-btn" data-filter="ongoing">
+              Em Andamento
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="carousel-container">
+        <div id="dashboard-output"></div>
+        <button id="prev-btn" class="nav-button prev-btn">
+          <svg
+            class="w-6 h-6 text-gray-700"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M15 19l-7-7 7-7"
+            ></path>
+          </svg>
+        </button>
+        <button id="next-btn" class="nav-button next-btn">
+          <svg
+            class="w-6 h-6 text-gray-700"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M9 5l7 7-7 7"
+            ></path>
+          </svg>
+        </button>
+      </div>
+      <div id="week-indicators" class="week-indicators"></div>
+    </div>
+    <script>
+      const dashboardOutput = document.getElementById("dashboard-output");
+      const groupingInfo = document.getElementById("grouping-info");
+      const prevBtn = document.getElementById("prev-btn");
+      const nextBtn = document.getElementById("next-btn");
+      const indicatorsContainer = document.getElementById("week-indicators");
+      const filterControls = document.getElementById("filter-controls");
+
+      const WEEKS_DATA_KEY = "projectWeeksRangeData";
+      const WEEKS_VIEW_GROUPING_KEY = "weeksViewGroupingConfig";
+      const WEEKS_VIEW_HIDDEN_ACTIVITIES_KEY = "weeksViewHiddenActivities";
+      const ACTIVITY_MAPPING_KEY = "activityMapping";
+      const CUSTOM_VALUES_KEY = "customActivityValues";
+
+      let fullTaskList = [],
+        weeksData = [],
+        upcomingWeeks = [],
+        wbsHierarchy = [],
+        wbsMap = new Map(),
+        activityMapping = [],
+        activityStageMap = new Map(),
+        customValuesData = new Map();
+      let currentWeekIndex = 0;
+      let groupedByWeek = {};
+      let currentFilter = "all";
+
+      function formatBrazilianDate(d) {
+        if (!d) return "N/A";
+        const [y, m, day] = d.split(" ")[0].split("-");
+        return y && m && day ? `${day}/${m}/${y}` : d;
+      }
+      function formatNumberBR(num) {
+        if (num === null || num === undefined) return "-";
+        return Number(num).toLocaleString("pt-BR", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        });
+      }
+
+      function getWeekForDate(d, w) {
+        if (!d || w.length === 0) return null;
+        const c = new Date(d);
+        c.setHours(0, 0, 0, 0);
+        const f = w.find((wk) => {
+          const s = new Date(wk.Data_Inicio + "T00:00:00");
+          const e = new Date(wk.Data_Fim + "T23:59:59");
+          return c >= s && c <= e;
+        });
+        return f ? parseInt(f.Semana, 10) : null;
+      }
+
+      function getWbsPathObjects(stableIdRef) {
+        let path = [];
+        let currentId = stableIdRef;
+        while (currentId && wbsMap.has(currentId)) {
+          const currentWbs = wbsMap.get(currentId);
+          path.unshift(currentWbs);
+          currentId = currentWbs.parent_stable_wbs_id;
+        }
+        return path;
+      }
+
+      window.onload = () => {
+        try {
+          const allProjectsData = JSON.parse(
+            localStorage.getItem("allProjectsData") || "{}"
+          );
+          weeksData = JSON.parse(localStorage.getItem(WEEKS_DATA_KEY) || "[]");
+          activityMapping = JSON.parse(
+            localStorage.getItem(ACTIVITY_MAPPING_KEY) || "[]"
+          );
+          customValuesData = new Map(
+            JSON.parse(localStorage.getItem(CUSTOM_VALUES_KEY) || "[]").map(
+              (item) => [item.id, item]
+            )
+          );
+
+          if (Object.keys(allProjectsData).length === 0) {
+            dashboardOutput.innerHTML = `<div class="message-box col-span-full">Nenhum projeto encontrado.</div>`;
+            return;
+          }
+          if (weeksData.length === 0) {
+            dashboardOutput.innerHTML = `<div class="message-box col-span-full">Nenhum mapeamento de semanas encontrado.</div>`;
+            return;
+          }
+
+          const latestProjectId = Object.keys(allProjectsData).reduce(
+            (l, c) => {
+              const ld = allProjectsData[l]?.PROJECT?.rows[0]?.last_recalc_date;
+              const cd = allProjectsData[c]?.PROJECT?.rows[0]?.last_recalc_date;
+              return !cd ||
+                (ld &&
+                  new Date(ld.replace(" ", "T")) >
+                    new Date(cd.replace(" ", "T")))
+                ? l
+                : c;
+            }
+          );
+
+          fullTaskList = allProjectsData[latestProjectId]?.TASK?.rows || [];
+          wbsHierarchy =
+            allProjectsData[latestProjectId]?.WBS_HIERARCHY?.rows || [];
+          wbsMap = new Map(wbsHierarchy.map((w) => [w.stable_wbs_id, w]));
+
+          const currentWeek = getWeekForDate(new Date(), weeksData);
+          if (currentWeek === null) {
+            dashboardOutput.innerHTML = `<div class="message-box">Data atual fora do mapeamento.</div>`;
+            return;
+          }
+
+          upcomingWeeks = Array.from(
+            { length: 6 },
+            (_, i) => currentWeek + 1 + i
+          );
+
+          fullTaskList.forEach(
+            (task) => (task.wbsPath = getWbsPathObjects(task.wbs_stable_id_ref))
+          );
+          activityMapping.forEach((group) => {
+            const tasksInGroup = group.taskCodes
+              .map((code) => fullTaskList.find((t) => t.task_code === code))
+              .filter(Boolean);
+            tasksInGroup.sort((a, b) => {
+              const dateA = a.target_start_date
+                ? new Date(a.target_start_date.replace(" ", "T"))
+                : new Date("9999-12-31");
+              const dateB = b.target_start_date
+                ? new Date(b.target_start_date.replace(" ", "T"))
+                : new Date("9999-12-31");
+              return dateA - dateB;
+            });
+            tasksInGroup.forEach((task, index) => {
+              activityStageMap.set(task.task_code, {
+                groupName: group.groupName,
+                stage: index + 1,
+                totalStages: tasksInGroup.length,
+              });
+            });
+          });
+
+          processAllWeeksData();
+          renderCurrentWeekView();
+          setupNavigation();
+        } catch (e) {
+          console.error(e);
+          dashboardOutput.innerHTML = `<div class="message-box" style="color: #b91c1c;">Erro: ${e.message}</div>`;
+        }
+      };
+
+      function processAllWeeksData() {
+        // (Código inalterado)
+        let groupingLevels = JSON.parse(
+          localStorage.getItem(WEEKS_VIEW_GROUPING_KEY) || "null"
+        );
+        const hiddenActivities = JSON.parse(
+          localStorage.getItem(WEEKS_VIEW_HIDDEN_ACTIVITIES_KEY) || "[]"
+        );
+        if (!groupingLevels || groupingLevels.length === 0) {
+          const maxLevel = Math.max(
+            0,
+            ...wbsHierarchy.map((w) => parseInt(w.level, 10))
+          );
+          groupingLevels = Array.from({ length: maxLevel }, (_, i) => i + 1);
+          groupingInfo.textContent =
+            "Agrupando por hierarquia completa (padrão).";
+        } else {
+          groupingInfo.innerHTML = `Agrupando por: <strong>${groupingLevels
+            .map((l) => `Nível ${l}`)
+            .join(
+              " &rarr; "
+            )}</strong>. <a href="configuracao.html" class="text-blue-600 hover:underline">Alterar</a>`;
+        }
+        const tasksToProcess = fullTaskList.filter((task) => {
+          if (
+            task.status_code === "TK_Complete" ||
+            hiddenActivities.includes(task.task_code)
+          )
+            return false;
+          const startDateStr = task.act_start_date || task.restart_date;
+          const endDateStr = task.reend_date || task.target_end_date;
+          if (!startDateStr || !endDateStr) return false;
+          const startWeek = getWeekForDate(
+            new Date(startDateStr.replace(" ", "T")),
+            weeksData
+          );
+          const endWeek = getWeekForDate(
+            new Date(endDateStr.replace(" ", "T")),
+            weeksData
+          );
+          if (startWeek === null || endWeek === null || endWeek < startWeek)
+            return false;
+          return upcomingWeeks.some((w) => w >= startWeek && w <= endWeek);
+        });
+        upcomingWeeks.forEach((w) => (groupedByWeek[w] = {}));
+        tasksToProcess.forEach((task) => {
+          const startDate = new Date(
+            (task.act_start_date || task.restart_date).replace(" ", "T")
+          );
+          const endDate = new Date(
+            (task.reend_date || task.target_end_date).replace(" ", "T")
+          );
+          const startWeek = getWeekForDate(startDate, weeksData);
+          const endWeek = getWeekForDate(endDate, weeksData);
+          for (let weekNum = startWeek; weekNum <= endWeek; weekNum++) {
+            if (upcomingWeeks.includes(weekNum)) {
+              let tag = weekNum === startWeek ? "Início" : "";
+              if (weekNum === endWeek) tag = tag ? "Início e Fim" : "Fim";
+              const groupName = activityStageMap.get(task.task_code)?.groupName;
+              const item = groupName
+                ? { type: "group", groupName, task: { ...task, tag } }
+                : { type: "task", task: { ...task, tag } };
+              buildGroupedTreeRecursive(
+                item,
+                groupingLevels,
+                groupedByWeek[weekNum]
+              );
+            }
+          }
+        });
+      }
+
+      function buildGroupedTreeRecursive(item, levels, currentTree) {
+        // (Código inalterado)
+        const { type, task, groupName } = item;
+        const [currentLevelToGroup, ...remainingLevels] = levels;
+        if (!currentLevelToGroup) return;
+        const wbsNodeAtLevel = task.wbsPath.find(
+          (p) => p.level == currentLevelToGroup
+        );
+        if (!wbsNodeAtLevel) {
+          const closestParentNode =
+            task.wbsPath.length > 0
+              ? task.wbsPath[task.wbsPath.length - 1]
+              : { wbs_name: "(Sem WBS)", stable_wbs_id: "(Sem WBS)" };
+          const groupKey = closestParentNode.stable_wbs_id;
+          if (!currentTree[groupKey])
+            currentTree[groupKey] = {
+              data: closestParentNode,
+              children: {},
+              items: new Map(),
+            };
+          const itemKey = type === "group" ? groupName : task.task_code;
+          if (!currentTree[groupKey].items.has(itemKey))
+            currentTree[groupKey].items.set(itemKey, {
+              type,
+              data: type === "group" ? { groupName } : task,
+              relatedTasks: [],
+            });
+          currentTree[groupKey].items.get(itemKey).relatedTasks.push(task);
+          return;
+        }
+        const groupKey = wbsNodeAtLevel.stable_wbs_id;
+        if (!currentTree[groupKey])
+          currentTree[groupKey] = {
+            data: wbsNodeAtLevel,
+            children: {},
+            items: new Map(),
+          };
+        if (remainingLevels.length === 0) {
+          const itemKey = type === "group" ? groupName : task.task_code;
+          if (!currentTree[groupKey].items.has(itemKey))
+            currentTree[groupKey].items.set(itemKey, {
+              type,
+              data: type === "group" ? { groupName } : task,
+              relatedTasks: [],
+            });
+          currentTree[groupKey].items.get(itemKey).relatedTasks.push(task);
+        } else {
+          buildGroupedTreeRecursive(
+            item,
+            remainingLevels,
+            currentTree[groupKey].children
+          );
+        }
+      }
+
+      function itemMatchesFilter(item) {
+        if (currentFilter === "all") return true;
+        if (item.type === "group") {
+          return item.relatedTasks.some((task) => {
+            const tag = task.tag || "";
+            if (currentFilter === "start") return tag.includes("Início");
+            if (currentFilter === "end") return tag.includes("Fim");
+            if (currentFilter === "ongoing") return tag === "";
+            return false;
+          });
+        }
+        const tag = item.relatedTasks[0].tag || "";
+        if (currentFilter === "start") return tag.includes("Início");
+        if (currentFilter === "end") return tag.includes("Fim");
+        if (currentFilter === "ongoing") return tag === "";
+        return false;
+      }
+
+      function renderCurrentWeekView() {
+        const weekNumber = upcomingWeeks[currentWeekIndex];
+        const weekTree = { children: groupedByWeek[weekNumber] || {} };
+        const weekInfo = weeksData.find(
+          (w) => parseInt(w.Semana, 10) === weekNumber
+        );
+        const dateRange = weekInfo
+          ? `(${formatBrazilianDate(
+              weekInfo.Data_Inicio
+            )} - ${formatBrazilianDate(weekInfo.Data_Fim)})`
+          : "";
+
+        let hasContent = false;
+
+        const renderNode = (node) => {
+          let html = "";
+          const sortedChildrenKeys = Object.keys(node.children).sort((a, b) =>
+            node.children[a].data.wbs_name.localeCompare(
+              node.children[b].data.wbs_name
+            )
+          );
+
+          sortedChildrenKeys.forEach((key) => {
+            const childNode = node.children[key];
+            const filteredItems = Array.from(childNode.items.values()).filter(
+              itemMatchesFilter
+            );
+            const childrenHtml = renderNode(childNode);
+            if (filteredItems.length === 0 && childrenHtml === "") return;
+            html += `<div class="wbs-group"><h4 class="wbs-title"><span>${childNode.data.wbs_name}</span><span class="wbs-toggle text-xl text-gray-500 font-mono cursor-pointer">+</span></h4><div class="wbs-content">`;
+            if (filteredItems.length > 0) {
+              html += '<div class="item-list">';
+              filteredItems.forEach((item) => {
+                hasContent = true;
+                let tagHtml = "";
+                let tooltipHtml = "";
+                let itemEntryClass = "item-entry";
+
+                if (item.type === "group") {
+                  const { groupName, totalStages } = activityStageMap.get(
+                    item.relatedTasks[0].task_code
+                  );
+                  const groupId = `group::${groupName}`;
+                  const customValue = customValuesData.get(groupId);
+
+                  if (customValue) {
+                    const remaining =
+                      (customValue.planned || 0) - (customValue.actual || 0);
+                    tooltipHtml = `data-tooltip="Saldo Topográfico: ${formatNumberBR(
+                      remaining
+                    )}"`;
+                    itemEntryClass += " tooltip has-tooltip";
+                  }
+
+                  const stagesInWeek = item.relatedTasks
+                    .map((t) => activityStageMap.get(t.task_code).stage)
+                    .sort((a, b) => a - b);
+                  const startsInWeek = item.relatedTasks.some((t) =>
+                    t.tag.includes("Início")
+                  );
+                  const endsInWeek = item.relatedTasks.some((t) =>
+                    t.tag.includes("Fim")
+                  );
+                  if (startsInWeek)
+                    tagHtml += `<span class="tag tag-start">Início</span>`;
+                  if (endsInWeek)
+                    tagHtml += `<span class="tag tag-end">Fim</span>`;
+                  const stageText =
+                    stagesInWeek.length > 1
+                      ? `Etapas ${stagesInWeek.join(", ")}`
+                      : `Etapa ${stagesInWeek[0]}`;
+                  html += `<div class="${itemEntryClass}" ${tooltipHtml}><div class="flex justify-between items-center"><p class="font-semibold text-gray-700">${groupName}</p><div>${tagHtml}</div></div><p class="text-sm text-gray-500 italic">${stageText} de ${totalStages}</p></div>`;
+                } else {
+                  const task = item.relatedTasks[0];
+                  const customValue = customValuesData.get(task.task_code);
+
+                  if (customValue) {
+                    const remaining =
+                      (customValue.planned || 0) - (customValue.actual || 0);
+                    tooltipHtml = `data-tooltip="Saldo Topográfico: ${formatNumberBR(
+                      remaining
+                    )}"`;
+                    itemEntryClass += " tooltip has-tooltip";
+                  }
+
+                  if (task.tag.includes("Início"))
+                    tagHtml += `<span class="tag tag-start">Início</span>`;
+                  if (task.tag.includes("Fim"))
+                    tagHtml += `<span class="tag tag-end">Fim</span>`;
+                  html += `<div class="${itemEntryClass}" ${tooltipHtml}><div class="flex justify-between items-center"><p class="font-semibold text-gray-700">${task.task_code}</p><div>${tagHtml}</div></div><p class="text-sm text-gray-600">${task.task_name}</p></div>`;
+                }
+              });
+              html += "</div>";
+            }
+            html += childrenHtml;
+            html += `</div></div>`;
+          });
+          return html;
+        };
+
+        let weekContent = renderNode(weekTree);
+        if (!hasContent) {
+          weekContent = `<p class="text-lg text-gray-500 italic py-20 text-center">Nenhuma atividade para o filtro "${currentFilter}" nesta semana.</p>`;
+        }
+
+        dashboardOutput.innerHTML = `
+            <div class="week-card">
+              <div class="week-card-header">
+                  <h3>
+                    <span>Semana ${weekNumber}</span> 
+                    <span class="text-lg font-normal text-gray-500">(${
+                      currentWeekIndex + 1
+                    }ª de 6)</span>
+                    <span class="text-base font-normal text-gray-500 ml-4">${dateRange}</span>
+                  </h3>
+                  <button id="toggle-all-btn" data-state="collapsed" class="text-sm font-medium text-blue-600 hover:text-blue-800 p-2 rounded-md hover:bg-blue-50 transition-colors">Expandir Tudo</button>
+              </div>
+              ${weekContent}
+            </div>`;
+
+        document.querySelectorAll(".wbs-content").forEach((content) => {
+          content.style.maxHeight = "0px";
+        });
+
+        document
+          .getElementById("toggle-all-btn")
+          ?.addEventListener("click", toggleAllWbs);
+        updateNavigation();
+      }
+
+      function toggleAllWbs(event) {
+        const btn = event.target;
+        const isExpanding = btn.dataset.state === "collapsed";
+        const allContentElements = Array.from(
+          dashboardOutput.querySelectorAll(".wbs-content")
+        );
+
+        if (isExpanding) {
+          allContentElements.reverse().forEach((content) => {
+            const icon =
+              content.previousElementSibling.querySelector(".wbs-toggle");
+            content.style.maxHeight = content.scrollHeight + "px";
+            if (icon) icon.textContent = "-";
+          });
+        } else {
+          allContentElements.forEach((content) => {
+            const icon =
+              content.previousElementSibling.querySelector(".wbs-toggle");
+            content.style.maxHeight = "0px";
+            if (icon) icon.textContent = "+";
+          });
+        }
+        btn.dataset.state = isExpanding ? "expanded" : "collapsed";
+        btn.textContent = isExpanding ? "Minimizar Tudo" : "Expandir Tudo";
+      }
+
+      function setupNavigation() {
+        prevBtn.addEventListener("click", () => {
+          if (currentWeekIndex > 0) {
+            currentWeekIndex--;
+            renderCurrentWeekView();
+          }
+        });
+        nextBtn.addEventListener("click", () => {
+          if (currentWeekIndex < upcomingWeeks.length - 1) {
+            currentWeekIndex++;
+            renderCurrentWeekView();
+          }
+        });
+
+        indicatorsContainer.innerHTML = upcomingWeeks
+          .map(
+            (_, i) => `<span class="indicator-dot" data-index="${i}"></span>`
+          )
+          .join("");
+        indicatorsContainer
+          .querySelectorAll(".indicator-dot")
+          .forEach((dot) => {
+            dot.addEventListener("click", () => {
+              currentWeekIndex = parseInt(dot.dataset.index);
+              renderCurrentWeekView();
+            });
+          });
+
+        function updateParentHeights(element, change) {
+          let parent = element.parentElement.closest(".wbs-content");
+          while (parent) {
+            if (parent.style.maxHeight && parent.style.maxHeight !== "0px") {
+              const currentHeight = parseInt(parent.style.maxHeight, 10);
+              parent.style.maxHeight = `${currentHeight + change}px`;
+            }
+            parent = parent.parentElement.closest(".wbs-content");
+          }
+        }
+
+        dashboardOutput.addEventListener("click", (e) => {
+          const toggleTitle = e.target.closest(".wbs-title");
+          if (!toggleTitle) return;
+
+          const content = toggleTitle.nextElementSibling;
+          const icon = toggleTitle.querySelector(".wbs-toggle");
+
+          const isCurrentlyExpanded =
+            content.style.maxHeight && content.style.maxHeight !== "0px";
+
+          if (isCurrentlyExpanded) {
+            const heightToSubtract = content.scrollHeight;
+            updateParentHeights(content, -heightToSubtract);
+            content.style.maxHeight = "0px";
+            icon.textContent = "+";
+          } else {
+            const heightToAdd = content.scrollHeight;
+            content.style.maxHeight = `${heightToAdd}px`;
+            updateParentHeights(content, heightToAdd);
+            icon.textContent = "-";
+          }
+        });
+
+        filterControls.addEventListener("click", (e) => {
+          if (e.target.matches(".filter-btn")) {
+            filterControls.querySelector(".active").classList.remove("active");
+            e.target.classList.add("active");
+            currentFilter = e.target.dataset.filter;
+            renderCurrentWeekView();
+          }
+        });
+      }
+
+      function updateNavigation() {
+        prevBtn.disabled = currentWeekIndex === 0;
+        nextBtn.disabled = currentWeekIndex === upcomingWeeks.length - 1;
+        indicatorsContainer
+          .querySelectorAll(".indicator-dot")
+          .forEach((dot, index) => {
+            dot.classList.toggle("active", index === currentWeekIndex);
+          });
+      }
+    </script>
+  </body>
+</html>

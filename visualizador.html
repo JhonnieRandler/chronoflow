@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Visualizador de Tabelas P6</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+      body {
+        font-family: "Inter", sans-serif;
+        background-color: #f0f2f5;
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+        min-height: 100vh;
+        padding: 2rem;
+        box-sizing: border-box;
+      }
+      .container {
+        background-color: #ffffff;
+        padding: 2.5rem;
+        border-radius: 1rem;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        width: 100%;
+        max-width: 1000px;
+        text-align: center;
+      }
+      .controls-section {
+        margin-bottom: 2rem;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+        justify-content: center;
+        align-items: center;
+      }
+      .controls-section label,
+      .controls-section select,
+      .controls-section input {
+        font-size: 1rem;
+        padding: 0.75rem 1rem;
+        border-radius: 0.5rem;
+        border: 1px solid #cbd5e1;
+        background-color: #f8fafc;
+      }
+      .controls-section select {
+        min-width: 150px;
+        cursor: pointer;
+        outline: none;
+        transition: border-color 0.3s ease;
+      }
+      .controls-section select:focus {
+        border-color: #6366f1;
+      }
+      .controls-section input[type="text"] {
+        flex-grow: 1;
+        max-width: 400px;
+        outline: none;
+        transition: border-color 0.3s ease;
+      }
+      .controls-section input[type="text"]:focus {
+        border-color: #6366f1;
+      }
+      .table-display-section {
+        margin-top: 2rem;
+        text-align: left;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 1.5rem;
+      }
+      th,
+      td {
+        border: 1px solid #e2e8f0;
+        padding: 0.75rem;
+        text-align: left;
+        font-size: 0.875rem;
+      }
+      th {
+        background-color: #f1f5f9;
+        font-weight: 600;
+        color: #334155;
+      }
+      tbody tr:nth-child(even) {
+        background-color: #f8fafc;
+      }
+      tbody tr:hover {
+        background-color: #e2e8f0;
+      }
+      .message-box {
+        background-color: #fff;
+        border: 1px solid #ccc;
+        padding: 15px;
+        margin-top: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        text-align: center;
+      }
+      .message-box.error {
+        border-color: #ef4444;
+        background-color: #fef2f2;
+        color: #ef4444;
+      }
+      .message-box.info {
+        border-color: #3b82f6;
+        background-color: #eff6ff;
+        color: #3b82f6;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1 class="text-4xl font-bold text-gray-800 mb-6">
+        Visualizador de Tabelas P6
+      </h1>
+      <p class="text-gray-600 mb-8">
+        Selecione um projeto e uma tabela para visualizar e filtrar os dados.
+      </p>
+      <div class="controls-section">
+        <label for="project-select" class="font-medium text-gray-700"
+          >Escolha o Projeto:</label
+        >
+        <select id="project-select" class="flex-1 max-w-xs">
+          <option value="">-- Selecione um projeto --</option>
+        </select>
+        <label for="table-select" class="font-medium text-gray-700"
+          >Escolha a Tabela:</label
+        >
+        <select id="table-select" class="flex-1 max-w-xs" disabled>
+          <option value="">-- Selecione uma tabela --</option>
+        </select>
+        <label for="filter-input" class="sr-only">Filtrar dados:</label>
+        <input
+          type="text"
+          id="filter-input"
+          placeholder="Filtrar dados da tabela..."
+          class="flex-1"
+          disabled
+        />
+      </div>
+      <section class="table-display-section">
+        <h2
+          id="current-table-title"
+          class="text-3xl font-bold text-gray-800 mb-6 hidden"
+        ></h2>
+        <div id="table-output" class="text-gray-700">
+          <p class="message-box info">Carregando dados das tabelas salvas...</p>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      const projectSelect = document.getElementById("project-select");
+      const tableSelect = document.getElementById("table-select");
+      const filterInput = document.getElementById("filter-input");
+      const tableOutput = document.getElementById("table-output");
+      const currentTableTitle = document.getElementById("current-table-title");
+
+      let allProjectsData = {};
+      let allTaskRsrcData = [];
+      let currentSelectedProjectId = null;
+      let currentSelectedTableData = null;
+      let currentSelectedTableName = null;
+
+      const COLUMNS_TO_SAVE_MAP = {
+        PROJECT: [
+          "proj_id",
+          "proj_name",
+          "last_recalc_date",
+          "plan_start_date",
+          "scd_end_date",
+        ],
+        RSRC: ["rsrc_name", "rsrc_type"],
+        TASK: [
+          "status_code",
+          "task_code",
+          "task_name",
+          "target_equip_qty",
+          "act_equip_qty",
+          "remain_equip_qty",
+          "act_start_date",
+          "act_end_date",
+          "reend_date",
+          "restart_date",
+          "target_start_date",
+          "target_end_date",
+          "wbs_stable_id_ref",
+        ],
+        TASKPRED: [
+          "task_id_code",
+          "pred_task_id_code",
+          "pred_type",
+          "lag_hr_cnt",
+        ],
+        TASKRSRC: [
+          "proj_id",
+          "remain_qty",
+          "target_qty",
+          "act_reg_qty",
+          "rsrc_type",
+          "task_id_code",
+          "rsrc_id_name",
+        ],
+        ACTVCODE: ["actv_code_name", "parent_actv_code_name"],
+        TASKACTV: ["task_id_code", "actv_code_id_name"],
+        PROJWBS: ["wbs_id", "wbs_name", "parent_wbs_id"],
+        WBS_HIERARCHY: [
+          "stable_wbs_id",
+          "wbs_name",
+          "level",
+          "parent_stable_wbs_id",
+        ],
+      };
+
+      const ALL_POSSIBLE_TABLE_NAMES = [
+        "PROJECT",
+        "RSRC",
+        "TASK",
+        "TASKPRED",
+        "WBS_HIERARCHY",
+        "PROJWBS",
+        "ACTVCODE",
+        "TASKACTV",
+        "TASKRSRC",
+      ];
+
+      function loadAllDataFromLocalStorage() {
+        try {
+          allProjectsData = JSON.parse(
+            localStorage.getItem("allProjectsData") || "{}"
+          );
+          allTaskRsrcData = JSON.parse(
+            localStorage.getItem("allTaskRsrcData") || "[]"
+          );
+          populateProjectSelect(allProjectsData);
+
+          const projectIds = Object.keys(allProjectsData);
+          if (projectIds.length > 0) {
+            let latestProjectId = null;
+            let latestRecalcDate = new Date(0);
+
+            for (const projId of projectIds) {
+              const projectData = allProjectsData[projId]["PROJECT"];
+              if (
+                projectData &&
+                projectData.rows.length > 0 &&
+                projectData.rows[0].last_recalc_date
+              ) {
+                const dateString = projectData.rows[0].last_recalc_date.replace(
+                  /(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2})/,
+                  "$1T$2:00"
+                );
+                const currentRecalcDate = new Date(dateString);
+                if (
+                  !isNaN(currentRecalcDate.getTime()) &&
+                  currentRecalcDate > latestRecalcDate
+                ) {
+                  latestRecalcDate = currentRecalcDate;
+                  latestProjectId = projId;
+                }
+              }
+            }
+
+            if (latestProjectId) {
+              projectSelect.value = latestProjectId;
+              currentSelectedProjectId = latestProjectId;
+              populateTableSelect(allProjectsData[latestProjectId]);
+              tableSelect.disabled = false;
+              filterInput.disabled = false;
+
+              const defaultTable =
+                ["TASK", "PROJECT"].find(
+                  (name) =>
+                    allProjectsData[latestProjectId][name]?.rows.length > 0
+                ) ||
+                Object.keys(allProjectsData[latestProjectId]).find(
+                  (name) =>
+                    allProjectsData[latestProjectId][name].rows.length > 0
+                ) ||
+                (allTaskRsrcData.some((row) => row.proj_id === latestProjectId)
+                  ? "TASKRSRC"
+                  : null);
+
+              if (defaultTable) {
+                tableSelect.value = defaultTable;
+                currentSelectedTableName = defaultTable;
+                currentSelectedTableData =
+                  allProjectsData[latestProjectId][defaultTable] || null;
+                renderTable();
+              } else {
+                tableOutput.innerHTML =
+                  '<p class="message-box info">Nenhuma tabela encontrada para o projeto selecionado.</p>';
+              }
+            } else {
+              tableOutput.innerHTML =
+                '<p class="message-box info">Nenhuma informação de projeto com data de recálculo válida encontrada.</p>';
+            }
+          } else {
+            tableOutput.innerHTML =
+              '<p class="message-box info">Nenhum dado de projeto encontrado. Por favor, envie um arquivo .xer.</p>';
+            projectSelect.disabled = true;
+            tableSelect.disabled = true;
+            filterInput.disabled = true;
+          }
+        } catch (error) {
+          console.error("Erro ao carregar dados do localStorage:", error);
+          tableOutput.innerHTML = `<p class="message-box error">Erro ao carregar dados salvos: ${error.message}.</p>`;
+        }
+      }
+
+      function populateProjectSelect(projectsData) {
+        projectSelect.innerHTML =
+          '<option value="">-- Selecione um projeto --</option>';
+        Object.keys(projectsData)
+          .sort()
+          .forEach((projId) => {
+            const option = document.createElement("option");
+            option.value = projId;
+            option.textContent = projId;
+            projectSelect.appendChild(option);
+          });
+      }
+
+      function populateTableSelect(projectTables) {
+        tableSelect.innerHTML =
+          '<option value="">-- Selecione uma tabela --</option>';
+        const availableTableNames = Object.keys(projectTables).filter(
+          (name) => projectTables[name]?.rows?.length > 0
+        );
+        if (
+          currentSelectedProjectId &&
+          allTaskRsrcData.some(
+            (row) => row.proj_id === currentSelectedProjectId
+          )
+        ) {
+          if (!availableTableNames.includes("TASKRSRC"))
+            availableTableNames.push("TASKRSRC");
+        }
+        ALL_POSSIBLE_TABLE_NAMES.forEach((displayTableName) => {
+          if (availableTableNames.includes(displayTableName)) {
+            const option = document.createElement("option");
+            option.value = displayTableName;
+            option.textContent = displayTableName;
+            tableSelect.appendChild(option);
+          }
+        });
+      }
+
+      function renderTable() {
+        if (!currentSelectedTableName || !currentSelectedProjectId) {
+          tableOutput.innerHTML =
+            '<p class="message-box info">Selecione um projeto e uma tabela para visualizar.</p>';
+          currentTableTitle.classList.add("hidden");
+          return;
+        }
+        currentTableTitle.textContent = `Tabela: ${currentSelectedTableName}`;
+        currentTableTitle.classList.remove("hidden");
+
+        const filterValue = filterInput.value.toLowerCase().trim();
+        let headers = [];
+        let rowsToProcess =
+          currentSelectedTableName === "TASKRSRC"
+            ? allTaskRsrcData.filter(
+                (item) => item.proj_id === currentSelectedProjectId
+              )
+            : allProjectsData[currentSelectedProjectId][
+                currentSelectedTableName
+              ]?.rows || [];
+
+        headers =
+          COLUMNS_TO_SAVE_MAP[currentSelectedTableName]?.filter((h) =>
+            rowsToProcess.some((row) => row.hasOwnProperty(h))
+          ) || (rowsToProcess.length > 0 ? Object.keys(rowsToProcess[0]) : []);
+
+        const finalFilteredRows = rowsToProcess.filter((rowObject) => {
+          if (!filterValue) return true;
+          return Object.values(rowObject).some((value) =>
+            String(value).toLowerCase().includes(filterValue)
+          );
+        });
+
+        if (finalFilteredRows.length === 0) {
+          tableOutput.innerHTML = `<p class="message-box info">${
+            filterValue
+              ? `Nenhum resultado encontrado para "${filterValue}"`
+              : "A tabela não contém dados"
+          }.</p>`;
+          return;
+        }
+
+        let tableHtml = `<div class="overflow-x-auto"><table class="min-w-full bg-white border border-gray-300 rounded-lg"><thead class="bg-gray-100"><tr>${headers
+          .map((h) => `<th class="py-2 px-4 border-b">${h}</th>`)
+          .join("")}</tr></thead><tbody>`;
+        tableHtml += finalFilteredRows
+          .map(
+            (row) =>
+              `<tr>${headers
+                .map(
+                  (h) => `<td class="py-2 px-4 border-b">${row[h] || ""}</td>`
+                )
+                .join("")}</tr>`
+          )
+          .join("");
+        tableHtml += `</tbody></table></div>`;
+        tableOutput.innerHTML = tableHtml;
+      }
+
+      projectSelect.addEventListener("change", function () {
+        currentSelectedProjectId = this.value;
+        if (currentSelectedProjectId) {
+          tableSelect.disabled = false;
+          filterInput.disabled = false;
+          populateTableSelect(allProjectsData[currentSelectedProjectId]);
+          tableOutput.innerHTML =
+            '<p class="message-box info">Selecione uma tabela para visualizar.</p>';
+          currentTableTitle.classList.add("hidden");
+          filterInput.value = "";
+          tableSelect.value = "";
+          currentSelectedTableName = null;
+        } else {
+          tableSelect.disabled = true;
+          filterInput.disabled = true;
+          tableSelect.innerHTML =
+            '<option value="">-- Selecione uma tabela --</option>';
+        }
+      });
+      tableSelect.addEventListener("change", function () {
+        currentSelectedTableName = this.value;
+        renderTable();
+      });
+      filterInput.addEventListener("input", renderTable);
+      window.onload = loadAllDataFromLocalStorage;
+    </script>
+  </body>
+</html>

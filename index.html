@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Acompanhamento de Projetos P6</title>
+    <!-- Incluindo Tailwind CSS para estilização fácil e responsiva -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+      body {
+        font-family: "Inter", sans-serif;
+        background-color: #f0f2f5;
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+        min-height: 100vh;
+        padding: 2rem;
+        box-sizing: border-box;
+      }
+      .container {
+        background-color: #ffffff;
+        padding: 2.5rem;
+        border-radius: 1rem;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        width: 100%;
+        max-width: 900px;
+        text-align: center;
+      }
+      .drop-area {
+        border: 3px dashed #cbd5e1;
+        background-color: #f8fafc;
+        border-radius: 0.75rem;
+        padding: 3rem 2rem;
+        text-align: center;
+        transition: background-color 0.3s ease, border-color 0.3s ease;
+        cursor: pointer;
+        margin-bottom: 1.5rem;
+      }
+      .drop-area.highlight {
+        background-color: #eef2ff;
+        border-color: #6366f1;
+      }
+      .file-input-label {
+        display: inline-block;
+        background-color: #6366f1;
+        color: white;
+        padding: 0.75rem 1.5rem;
+        border-radius: 0.5rem;
+        cursor: pointer;
+        transition: background-color 0.3s ease;
+        font-weight: 500;
+      }
+      .file-input-label:hover {
+        background-color: #4f46e5;
+      }
+      input[type="file"] {
+        display: none;
+      }
+      .file-info {
+        margin-top: 1.5rem;
+        font-size: 1.125rem;
+        color: #4b5563;
+        font-weight: 500;
+      }
+      .dashboard-section {
+        margin-top: 3rem;
+        border-top: 1px solid #e5e7eb;
+        padding-top: 2rem;
+        text-align: left;
+      }
+      .message-box {
+        background-color: #fff;
+        border: 1px solid #ccc;
+        padding: 15px;
+        margin-top: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        text-align: center;
+      }
+      .message-box.error {
+        border-color: #ef4444;
+        background-color: #fef2f2;
+        color: #ef4444;
+      }
+      .message-box.info {
+        border-color: #3b82f6;
+        background-color: #eff6ff;
+        color: #3b82f6;
+      }
+      .nav-button {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background-color: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 0.75rem;
+        padding: 1.5rem;
+        text-decoration: none;
+        color: #1e293b;
+        transition: transform 0.2s ease, box-shadow 0.2s ease,
+          border-color 0.2s ease;
+        text-align: center;
+      }
+      .nav-button:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+        border-color: #c7d2fe;
+      }
+      .nav-button svg {
+        margin-bottom: 0.75rem;
+        color: #4f46e5;
+      }
+      .project-list-item {
+        background-color: #f1f5f9;
+        padding: 0.75rem 1.25rem;
+        border-radius: 0.5rem;
+        margin-bottom: 0.5rem;
+        font-size: 0.9rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1 class="text-4xl font-bold text-gray-800 mb-6">Painel de Controle</h1>
+      <p class="text-gray-600 mb-8">
+        Envie seu arquivo .xer do Primavera P6 para carregar ou atualizar as
+        informações do projeto.
+      </p>
+
+      <div id="drop-area" class="drop-area">
+        <p class="text-xl text-gray-500 mb-4">
+          Arraste e solte o arquivo .xer aqui
+        </p>
+        <p class="text-gray-400 mb-4">- OU -</p>
+        <label for="fileElem" class="file-input-label"
+          >Selecionar Arquivo</label
+        >
+        <input type="file" id="fileElem" accept=".xer" />
+      </div>
+
+      <div id="file-display" class="file-info hidden">
+        Último arquivo processado:
+        <span id="file-name" class="font-semibold text-gray-700"></span>
+      </div>
+
+      <section id="dashboard-section" class="dashboard-section">
+        <div id="dashboard-output">
+          <p class="message-box info">
+            Nenhuma informação de projeto carregada ainda. Por favor, envie um
+            arquivo .xer.
+          </p>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      const dropArea = document.getElementById("drop-area");
+      const fileElem = document.getElementById("fileElem");
+      const fileDisplay = document.getElementById("file-display");
+      const fileNameSpan = document.getElementById("file-name");
+      const dashboardOutput = document.getElementById("dashboard-output");
+
+      // --- Chaves do LocalStorage ---
+      const ALL_PROJECTS_DATA_KEY = "allProjectsData";
+      const ALL_TASKRSRC_DATA_KEY = "allTaskRsrcData";
+      const WEEKS_DATA_KEY = "projectWeeksRangeData";
+
+      // --- Mapeamento de Colunas a Salvar ---
+      const COLUMNS_TO_SAVE_MAP = {
+        PROJECT: [
+          "proj_id",
+          "proj_name",
+          "last_recalc_date",
+          "plan_start_date",
+          "scd_end_date",
+        ],
+        RSRC: ["rsrc_name", "rsrc_type"],
+        TASK: [
+          "status_code",
+          "task_code",
+          "task_name",
+          "target_equip_qty",
+          "act_equip_qty",
+          "remain_equip_qty",
+          "act_start_date",
+          "act_end_date",
+          "reend_date",
+          "restart_date",
+          "target_start_date",
+          "target_end_date",
+          "wbs_stable_id_ref",
+        ],
+        TASKPRED: [
+          "task_id_code",
+          "pred_task_id_code",
+          "pred_type",
+          "lag_hr_cnt",
+        ],
+        TASKRSRC: [
+          "proj_id",
+          "remain_qty",
+          "target_qty",
+          "act_reg_qty",
+          "rsrc_type",
+          "task_id_code",
+          "rsrc_id_name",
+        ],
+        PROJWBS: ["wbs_id", "wbs_name", "parent_wbs_id"],
+        WBS_HIERARCHY: [
+          "stable_wbs_id",
+          "wbs_name",
+          "wbs_group_id",
+          "level",
+          "parent_stable_wbs_id",
+        ],
+      };
+
+      // --- Funções de Drag & Drop ---
+      ["dragenter", "dragover", "dragleave", "drop"].forEach((eventName) => {
+        dropArea.addEventListener(eventName, preventDefaults, false);
+        document.body.addEventListener(eventName, preventDefaults, false);
+      });
+      function preventDefaults(e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      ["dragenter", "dragover"].forEach((eventName) =>
+        dropArea.addEventListener(eventName, highlight, false)
+      );
+      ["dragleave", "drop"].forEach((eventName) =>
+        dropArea.addEventListener(eventName, unhighlight, false)
+      );
+      function highlight() {
+        dropArea.classList.add("highlight");
+      }
+      function unhighlight() {
+        dropArea.classList.remove("highlight");
+      }
+      dropArea.addEventListener("drop", handleDrop, false);
+      function handleDrop(e) {
+        handleFiles(e.dataTransfer.files);
+      }
+      fileElem.addEventListener("change", function (e) {
+        handleFiles(e.target.files);
+      });
+
+      // --- Funções Auxiliares de Data ---
+      function formatBrazilianDate(d) {
+        if (!d) return "N/A";
+        const datePart = d.split(" ")[0];
+        const timePart = d.split(" ")[1] || "";
+        const [y, m, day] = datePart.split("-");
+        let formattedDate = y && m && day ? `${day}/${m}/${y}` : d;
+        if (timePart) {
+          formattedDate += ` ${timePart.substring(0, 5)}`;
+        }
+        return formattedDate;
+      }
+
+      function getWeekForDate(d, weeksMapping) {
+        if (!d || !weeksMapping || weeksMapping.length === 0) return null;
+        const checkDate = new Date(d.replace(" ", "T"));
+        const foundWeek = weeksMapping.find((week) => {
+          const startDate = new Date(week.Data_Inicio + "T00:00:00");
+          const endDate = new Date(week.Data_Fim + "T23:59:59");
+          return checkDate >= startDate && checkDate <= endDate;
+        });
+        return foundWeek ? foundWeek.Semana : null;
+      }
+
+      // --- Lógica Principal de Processamento do Arquivo ---
+      async function handleFiles(files) {
+        if (files.length === 0) return;
+        const file = files[0];
+        if (!file.name.toLowerCase().endsWith(".xer")) {
+          dashboardOutput.innerHTML = `<p class="message-box error">Por favor, selecione um arquivo com a extensão .xer.</p>`;
+          return;
+        }
+        fileNameSpan.textContent = file.name;
+        fileDisplay.classList.remove("hidden");
+        dashboardOutput.innerHTML = `<p class="message-box info">Processando e salvando arquivo... Isso pode levar alguns instantes.</p>`;
+
+        const reader = new FileReader();
+        reader.onload = async function (e) {
+          try {
+            const fileContent = e.target.result;
+            const parsedTables = parseXER(fileContent);
+
+            const currentProjectId =
+              parsedTables["PROJECT"]?.rows[0]?.proj_id || `UNK_${Date.now()}`;
+
+            const transformedTables = transformData(
+              parsedTables,
+              currentProjectId
+            );
+
+            let allProjectsData = JSON.parse(
+              localStorage.getItem(ALL_PROJECTS_DATA_KEY) || "{}"
+            );
+            let allTaskRsrcData = JSON.parse(
+              localStorage.getItem(ALL_TASKRSRC_DATA_KEY) || "[]"
+            );
+
+            // Atualiza os dados do projeto atual
+            const currentProjectVersionTables = {};
+            Object.keys(COLUMNS_TO_SAVE_MAP).forEach((tableName) => {
+              if (transformedTables[tableName]) {
+                currentProjectVersionTables[tableName] = filterTableColumns(
+                  transformedTables[tableName],
+                  COLUMNS_TO_SAVE_MAP[tableName]
+                );
+              }
+            });
+            allProjectsData[currentProjectId] = currentProjectVersionTables;
+
+            // Atualiza os dados de recursos (TASKRSRC)
+            if (transformedTables["TASKRSRC"]?.rows.length > 0) {
+              allTaskRsrcData = allTaskRsrcData.filter(
+                (item) => item.proj_id !== currentProjectId
+              );
+              const filteredTaskRsrcRows = filterRowsByColumns(
+                transformedTables["TASKRSRC"].rows,
+                COLUMNS_TO_SAVE_MAP["TASKRSRC"]
+              );
+              allTaskRsrcData.push(...filteredTaskRsrcRows);
+            }
+
+            localStorage.setItem(
+              ALL_PROJECTS_DATA_KEY,
+              JSON.stringify(allProjectsData)
+            );
+            localStorage.setItem(
+              ALL_TASKRSRC_DATA_KEY,
+              JSON.stringify(allTaskRsrcData)
+            );
+
+            loadDashboard(); // Atualiza o dashboard com os novos dados
+          } catch (error) {
+            console.error("Erro ao processar ou salvar o arquivo:", error);
+            dashboardOutput.innerHTML = `<p class="message-box error">Erro ao processar o arquivo: ${error.message}.</p>`;
+          }
+        };
+        reader.readAsText(file, "ISO-8859-1"); // Usar codificação correta para .xer
+      }
+
+      function parseXER(xerContent) {
+        const lines = xerContent.split(/\r?\n/);
+        const tables = {};
+        let currentTableName = null;
+        let currentTableHeaders = [];
+
+        for (const line of lines) {
+          const trimmedLine = line.trim();
+          if (trimmedLine.startsWith("%T")) {
+            currentTableName = trimmedLine.substring(2).trim();
+            tables[currentTableName] = { headers: [], rows: [] };
+          } else if (trimmedLine.startsWith("%F") && currentTableName) {
+            currentTableHeaders = trimmedLine
+              .substring(2)
+              .split("\t")
+              .map((h) => h.trim())
+              .filter((h) => h.length > 0);
+            tables[currentTableName].headers = currentTableHeaders;
+          } else if (
+            trimmedLine.startsWith("%R") &&
+            currentTableName &&
+            currentTableHeaders.length > 0
+          ) {
+            const values = trimmedLine.substring(2).trimStart().split("\t");
+            const rowObject = {};
+            currentTableHeaders.forEach((header, i) => {
+              rowObject[header] = values[i]?.trim() || "";
+            });
+            tables[currentTableName].rows.push(rowObject);
+          }
+        }
+        return tables;
+      }
+
+      function transformData(parsedTables, currentProjectId) {
+        // Deep copy para evitar mutações indesejadas
+        const transformed = JSON.parse(JSON.stringify(parsedTables));
+
+        // Criação da WBS_HIERARCHY
+        const wbsData = transformed.PROJWBS?.rows || [];
+        const wbsMap = new Map(wbsData.map((wbs) => [wbs.wbs_id, wbs]));
+        const hierarchyData = [];
+        const originalToStableIdMap = new Map();
+
+        // Construir IDs estáveis para garantir consistência
+        wbsData.forEach((wbs) => {
+          let path = [wbs.wbs_name];
+          let current = wbs;
+          while (current.parent_wbs_id && wbsMap.has(current.parent_wbs_id)) {
+            current = wbsMap.get(current.parent_wbs_id);
+            path.unshift(current.wbs_name);
+          }
+          const stableId = path.join(" > ");
+          originalToStableIdMap.set(wbs.wbs_id, stableId);
+        });
+
+        // Função para calcular o nível da WBS
+        const levelCache = new Map();
+        function getWbsLevel(wbsId) {
+          if (levelCache.has(wbsId)) return levelCache.get(wbsId);
+          const wbs = wbsMap.get(wbsId);
+          if (!wbs || !wbs.parent_wbs_id || !wbsMap.has(wbs.parent_wbs_id)) {
+            levelCache.set(wbsId, 1);
+            return 1;
+          }
+          const parentLevel = getWbsLevel(wbs.parent_wbs_id);
+          const currentLevel = parentLevel + 1;
+          levelCache.set(wbsId, currentLevel);
+          return currentLevel;
+        }
+
+        // Popular a tabela WBS_HIERARCHY
+        wbsData.forEach((wbs) => {
+          hierarchyData.push({
+            stable_wbs_id: originalToStableIdMap.get(wbs.wbs_id),
+            wbs_name: wbs.wbs_name,
+            wbs_group_id: wbs.wbs_name,
+            level: getWbsLevel(wbs.wbs_id),
+            parent_stable_wbs_id: wbs.parent_wbs_id
+              ? originalToStableIdMap.get(wbs.parent_wbs_id)
+              : null,
+          });
+        });
+
+        transformed["WBS_HIERARCHY"] = {
+          headers: [
+            "stable_wbs_id",
+            "wbs_name",
+            "wbs_group_id",
+            "level",
+            "parent_stable_wbs_id",
+          ],
+          rows: hierarchyData,
+        };
+
+        // Mapeamentos para enriquecimento de dados
+        const taskIdToCodeMap = new Map(
+          transformed.TASK?.rows.map((t) => [t.task_id, t.task_code])
+        );
+
+        // Adicionar referência wbs_stable_id_ref à tabela TASK
+        if (transformed.TASK) {
+          transformed.TASK.rows.forEach((task) => {
+            task.wbs_stable_id_ref =
+              originalToStableIdMap.get(task.wbs_id) || null;
+          });
+        }
+        // Adicionar códigos de task às tabelas de relacionamento
+        if (transformed.TASKPRED) {
+          transformed.TASKPRED.rows.forEach((pred) => {
+            pred.task_id_code =
+              taskIdToCodeMap.get(pred.task_id) || pred.task_id;
+            pred.pred_task_id_code =
+              taskIdToCodeMap.get(pred.pred_task_id) || pred.pred_task_id;
+          });
+        }
+        if (transformed.TASKRSRC) {
+          const rsrcIdToNameMap = new Map(
+            transformed.RSRC?.rows.map((r) => [r.rsrc_id, r.rsrc_name])
+          );
+          transformed.TASKRSRC.rows.forEach((taskrsrc) => {
+            taskrsrc.task_id_code =
+              taskIdToCodeMap.get(taskrsrc.task_id) || taskrsrc.task_id;
+            taskrsrc.rsrc_id_name =
+              rsrcIdToNameMap.get(taskrsrc.rsrc_id) || taskrsrc.rsrc_id;
+            taskrsrc.proj_id = currentProjectId; // Adiciona o ID do projeto atual
+          });
+        }
+        return transformed;
+      }
+
+      function filterTableColumns(tableData, columnsToKeep) {
+        if (!tableData?.rows || !columnsToKeep)
+          return { headers: [], rows: [] };
+        const newHeaders = columnsToKeep.filter((header) =>
+          tableData.headers.includes(header)
+        );
+        const newRows = tableData.rows.map((row) => {
+          const newRow = {};
+          newHeaders.forEach((header) => {
+            newRow[header] = row[header] ?? "";
+          });
+          return newRow;
+        });
+        return { headers: newHeaders, rows: newRows };
+      }
+
+      function filterRowsByColumns(rows, columnsToKeep) {
+        if (!rows || !columnsToKeep) return [];
+        return rows.map((row) => {
+          const newRow = {};
+          columnsToKeep.forEach((header) => {
+            if (row.hasOwnProperty(header)) {
+              newRow[header] = row[header];
+            }
+          });
+          return newRow;
+        });
+      }
+
+      // --- Funções de Renderização do Dashboard ---
+      function displayDashboard(allProjectsData, weeksMapping) {
+        let projectsListHtml = Object.keys(allProjectsData)
+          .map((projId) => {
+            const projectInfo = allProjectsData[projId]?.PROJECT?.rows[0];
+            if (!projectInfo) return "";
+            const recalcDate = projectInfo.last_recalc_date;
+            const weekNumber = getWeekForDate(recalcDate, weeksMapping);
+            const weekText = weekNumber
+              ? `Semana ${weekNumber}`
+              : "Semana não mapeada";
+
+            return `
+            <div class="project-list-item">
+              <div class="font-medium text-gray-800">${weekText} <span class="text-xs text-gray-500 font-mono ml-2">(${projId})</span></div>
+              <div class="text-gray-600">Atualizado em: ${formatBrazilianDate(
+                recalcDate
+              )}</div>
+            </div>`;
+          })
+          .join("");
+
+        const navigationHtml = `
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mt-8">
+              <!-- Botão Configurações -->
+              <a href="configuracao.html" class="nav-button">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                <span class="font-semibold">Configurações</span>
+              </a>
+              <!-- Botão Próximas Semanas -->
+              <a href="proximas_semanas.html" class="nav-button">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                <span class="font-semibold">Próximas Semanas</span>
+              </a>
+              <!-- Botão Análise de Atividade -->
+              <a href="analise_atividade.html" class="nav-button">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+                <span class="font-semibold">Análise Detalhada</span>
+              </a>
+               <!-- Botão Visualizador -->
+              <a href="visualizador.html" class="nav-button">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                <span class="font-semibold">Visualizador de Dados</span>
+              </a>
+            </div>
+        `;
+
+        dashboardOutput.innerHTML = `
+            <div>
+              <h2 class="text-2xl font-bold text-gray-800 mb-4">Projetos Carregados</h2>
+              <div class="space-y-2">${projectsListHtml}</div>
+              <h2 class="text-2xl font-bold text-gray-800 mt-8 mb-4">Navegação</h2>
+              ${navigationHtml}
+            </div>
+        `;
+      }
+
+      function loadDashboard() {
+        try {
+          const allProjectsData = JSON.parse(
+            localStorage.getItem(ALL_PROJECTS_DATA_KEY) || "{}"
+          );
+          const weeksMapping = JSON.parse(
+            localStorage.getItem(WEEKS_DATA_KEY) || "[]"
+          );
+
+          const projectIds = Object.keys(allProjectsData);
+
+          if (projectIds.length > 0) {
+            displayDashboard(allProjectsData, weeksMapping);
+            fileDisplay.classList.remove("hidden");
+            if (!fileNameSpan.textContent) {
+              fileNameSpan.textContent =
+                "Dados carregados do armazenamento local.";
+            }
+          } else {
+            dashboardOutput.innerHTML =
+              '<p class="message-box info">Nenhuma informação de projeto carregada. Por favor, envie um arquivo .xer.</p>';
+          }
+        } catch (error) {
+          console.error("Erro ao carregar o dashboard:", error);
+          dashboardOutput.innerHTML = `<p class="message-box error">Ocorreu um erro ao carregar o dashboard: ${error.message}.</p>`;
+        }
+      }
+
+      // --- Inicialização da Página ---
+      window.onload = loadDashboard;
+    </script>
+  </body>
+</html>

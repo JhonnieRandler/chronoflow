@@ -1,0 +1,1091 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Configurações do Projeto</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link
+      href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.css"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+      body {
+        font-family: "Inter", sans-serif;
+        background-color: #f1f5f9;
+      }
+      .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 0.3s ease, visibility 0.3s ease;
+      }
+      .modal-overlay.active {
+        opacity: 1;
+        visibility: visible;
+      }
+      .modal-content {
+        background-color: white;
+        border-radius: 0.75rem;
+        width: 90%;
+        max-width: 700px;
+        max-height: 90vh;
+        transform: scale(0.95);
+        transition: transform 0.3s ease;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .modal-overlay.active .modal-content {
+        transform: scale(1);
+      }
+      #modal-header,
+      #modal-footer {
+        flex-shrink: 0;
+      }
+      #modal-body {
+        overflow-y: auto;
+        flex-grow: 1;
+      }
+      .config-card {
+        background-color: #ffffff;
+        padding: 1.5rem;
+        border-radius: 0.75rem;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+        cursor: pointer;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+      }
+      .config-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+      }
+      .config-icon {
+        flex-shrink: 0;
+        width: 3.5rem;
+        height: 3.5rem;
+        border-radius: 9999px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: #e0e7ff;
+        color: #4338ca;
+      }
+      .message-box {
+        text-align: center;
+        padding: 1rem;
+        border-radius: 0.5rem;
+      }
+      .message-box.error {
+        background-color: #fef2f2;
+        color: #b91c1c;
+        border: 1px solid #fecaca;
+      }
+      .message-box.success {
+        background-color: #f0fdf4;
+        color: #166534;
+        border: 1px solid #bbf7d0;
+      }
+      .ts-control {
+        border-radius: 0.375rem !important;
+        border: 1px solid #d1d5db !important;
+        padding: 0.5rem 0.75rem !important;
+      }
+      .ts-control .item[data-value] {
+        background-color: #4f46e5;
+        color: white;
+      }
+      .table-container {
+        border: 1px solid #e2e8f0;
+        border-radius: 0.5rem;
+        overflow: hidden;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.875rem;
+      }
+      th,
+      td {
+        padding: 0.75rem 1rem;
+        text-align: left;
+        border-bottom: 1px solid #e2e8f0;
+      }
+      th {
+        background-color: #f8fafc;
+        font-weight: 600;
+        color: #475569;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+    </style>
+  </head>
+  <body class="p-4 sm:p-6 md:p-8">
+    <div class="container mx-auto max-w-4xl">
+      <h1 class="text-3xl font-bold text-gray-800 mb-2">
+        Painel de Configurações
+      </h1>
+      <p class="text-gray-600 mb-8">Selecione uma opção para configurar.</p>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Cards de Configuração -->
+        <div id="config-weeks" class="config-card">
+          <div class="config-icon">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-6 w-6"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+              />
+            </svg>
+          </div>
+          <div>
+            <h2 class="font-bold text-lg text-gray-800">
+              Mapeamento de Semanas
+            </h2>
+            <p class="text-gray-600 text-sm">
+              Defina o início e fim de cada semana do projeto.
+            </p>
+          </div>
+        </div>
+        <div id="config-resource" class="config-card">
+          <div class="config-icon">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-6 w-6"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+              />
+            </svg>
+          </div>
+          <div>
+            <h2 class="font-bold text-lg text-gray-800">Recurso Principal</h2>
+            <p class="text-gray-600 text-sm">
+              Defina o recurso de avanço físico do projeto.
+            </p>
+          </div>
+        </div>
+        <div id="config-grouping" class="config-card">
+          <div class="config-icon">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-6 w-6"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M4 6h16M4 12h16M4 18h7"
+              />
+            </svg>
+          </div>
+          <div>
+            <h2 class="font-bold text-lg text-gray-800">Agrupamento Semanal</h2>
+            <p class="text-gray-600 text-sm">
+              Escolha como agrupar atividades na visão de 6 semanas.
+            </p>
+          </div>
+        </div>
+        <div id="config-hidden-activities" class="config-card">
+          <div class="config-icon">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-6 w-6"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a9.97 9.97 0 01-1.563 3.029m0 0l-2.14 2.14"
+              />
+            </svg>
+          </div>
+          <div>
+            <h2 class="font-bold text-lg text-gray-800">Ocultar Atividades</h2>
+            <p class="text-gray-600 text-sm">
+              Selecione atividades para não exibir na visão de 6 semanas.
+            </p>
+          </div>
+        </div>
+        <div id="config-activity-mapping" class="config-card">
+          <div class="config-icon bg-green-100 text-green-700">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-6 w-6"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a2 2 0 01-2-2V7a2 2 0 012-2h6l2-2h2l-2 2z"
+              />
+            </svg>
+          </div>
+          <div>
+            <h2 class="font-bold text-lg text-gray-800">
+              Mapeamento de Atividades
+            </h2>
+            <p class="text-gray-600 text-sm">
+              Agrupe atividades que representam o mesmo trabalho.
+            </p>
+          </div>
+        </div>
+        <div id="config-custom-values" class="config-card">
+          <div class="config-icon bg-yellow-100 text-yellow-700">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-6 w-6"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+              />
+            </svg>
+          </div>
+          <div>
+            <h2 class="font-bold text-lg text-gray-800">
+              Valores Personalizados
+            </h2>
+            <p class="text-gray-600 text-sm">
+              Insira valores previstos e realizados para atividades ou grupos.
+            </p>
+          </div>
+        </div>
+        <!-- NOVO: Card de Importar/Exportar -->
+        <div id="config-backup" class="config-card col-span-1 md:col-span-2">
+          <div class="config-icon bg-gray-200 text-gray-700">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-6 w-6"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
+              />
+            </svg>
+          </div>
+          <div>
+            <h2 class="font-bold text-lg text-gray-800">
+              Importar & Exportar Dados
+            </h2>
+            <p class="text-gray-600 text-sm">
+              Salve um backup de todos os dados e configurações ou restaure a
+              partir de um arquivo salvo.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Genérico -->
+    <div id="modal" class="modal-overlay">
+      <div class="modal-content">
+        <div
+          id="modal-header"
+          class="flex-shrink-0 px-6 sm:px-8 pt-6 pb-4 border-b border-gray-200"
+        >
+          <div class="flex justify-between items-start">
+            <h2 id="modal-title" class="text-2xl font-bold text-gray-800"></h2>
+            <button
+              id="modal-close-btn"
+              class="text-gray-400 hover:text-gray-700 text-3xl"
+            >
+              &times;
+            </button>
+          </div>
+          <div
+            id="modal-header-extra"
+            class="flex justify-between items-center mt-2"
+          >
+            <p id="modal-subtitle" class="text-gray-600 text-sm"></p>
+            <div id="modal-header-actions"></div>
+          </div>
+        </div>
+        <div id="modal-body" class="px-6 sm:px-8 py-6"></div>
+        <div
+          id="modal-footer"
+          class="flex-shrink-0 px-6 sm:px-8 pt-4 pb-6 mt-auto bg-gray-50 border-t"
+        >
+          <div id="modal-message-area" class="mb-4"></div>
+          <div class="flex justify-end gap-4">
+            <button
+              id="modal-cancel-btn"
+              class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300"
+            >
+              Cancelar
+            </button>
+            <button
+              id="modal-save-btn"
+              class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+            >
+              Salvar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // --- Chaves do LocalStorage ---
+      const ALL_DATA_KEYS = [
+        "allProjectsData",
+        "allTaskRsrcData",
+        "projectWeeksRangeData",
+        "mainProgressResource",
+        "weeksViewGroupingConfig",
+        "weeksViewHiddenActivities",
+        "activityMapping",
+        "customActivityValues",
+      ];
+
+      let latestProjectData = null;
+      let activeTomSelects = [];
+      let currentEditingId = null;
+      let fileToImport = null; // Armazena o arquivo selecionado para importação
+
+      const modal = document.getElementById("modal");
+      const modalTitle = document.getElementById("modal-title");
+      const modalSubtitle = document.getElementById("modal-subtitle");
+      const modalHeaderActions = document.getElementById(
+        "modal-header-actions"
+      );
+      const modalBody = document.getElementById("modal-body");
+      const modalMessageArea = document.getElementById("modal-message-area");
+      const modalSaveBtn = document.getElementById("modal-save-btn");
+
+      // --- Funções Auxiliares ---
+      function showMessage(text, type) {
+        modalMessageArea.innerHTML = `<div class="message-box ${type}">${text}</div>`;
+        setTimeout(() => {
+          modalMessageArea.innerHTML = "";
+        }, 5000);
+      }
+
+      function getLatestProject() {
+        if (latestProjectData) return latestProjectData;
+        const allProjectsData = JSON.parse(
+          localStorage.getItem("allProjectsData") || "{}"
+        );
+        const projectIds = Object.keys(allProjectsData);
+        if (projectIds.length === 0) return null;
+        const latestProjectId = projectIds.reduce((latest, current) => {
+          const latestDateStr =
+            allProjectsData[latest]?.PROJECT?.rows[0]?.last_recalc_date;
+          const currentDateStr =
+            allProjectsData[current]?.PROJECT?.rows[0]?.last_recalc_date;
+          if (!currentDateStr) return latest;
+          if (!latestDateStr) return current;
+          return new Date(currentDateStr.replace(" ", "T")) >
+            new Date(latestDateStr.replace(" ", "T"))
+            ? current
+            : latest;
+        });
+        latestProjectData = allProjectsData[latestProjectId];
+        return latestProjectData;
+      }
+      function formatNumberBR(num) {
+        if (num === null || num === undefined) return "-";
+        return Number(num).toLocaleString("pt-BR", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        });
+      }
+
+      // --- Gestão do Modal ---
+      function openModal(module) {
+        modalTitle.textContent = module.title;
+        modalSubtitle.textContent = module.subtitle || "";
+        modalBody.innerHTML = module.setup();
+        modalHeaderActions.innerHTML = "";
+        if (module.headerAction) {
+          const btn = document.createElement("button");
+          btn.id = module.headerAction.id;
+          btn.innerHTML = module.headerAction.icon;
+          btn.title = module.headerAction.tooltip;
+          btn.className =
+            "bg-blue-600 text-white p-2 rounded-full hover:bg-blue-700 transition-colors";
+          modalHeaderActions.appendChild(btn);
+        }
+        activeTomSelects.forEach((ts) => ts.destroy());
+        activeTomSelects = [];
+        modalMessageArea.innerHTML = "";
+        modalSaveBtn.style.display = "inline-flex";
+        modalSaveBtn.onclick = module.save;
+        modal.classList.add("active");
+      }
+
+      function closeModal() {
+        modal.classList.remove("active");
+        fileToImport = null; // Limpa o arquivo ao fechar o modal
+      }
+
+      // --- Funções de UI Específicas ---
+      function renderActivityMappingTable() {
+        let savedMapping = JSON.parse(
+          localStorage.getItem(ACTIVITY_MAPPING_KEY) || "[]"
+        );
+        modalSaveBtn.style.display = "none";
+        modalSubtitle.textContent =
+          "Gerencie grupos de atividades que representam o mesmo trabalho.";
+        document
+          .getElementById("add-new-group-btn")
+          ?.addEventListener("click", () => renderGroupEditForm());
+        savedMapping.sort((a, b) => a.groupName.localeCompare(b.groupName));
+        let tableHtml = `<div class="table-container"><table><thead><tr><th>Nome do Grupo</th><th>Nº de Atividades</th><th class="text-right">Ações</th></tr></thead><tbody>`;
+        if (savedMapping.length > 0) {
+          savedMapping.forEach((group, index) => {
+            tableHtml += `<tr><td class="font-semibold">${group.groupName}</td><td>${group.taskCodes.length}</td><td class="text-right"><div class="flex items-center justify-end gap-2"><button class="edit-group-btn text-blue-600 hover:text-blue-800 p-1 rounded-full hover:bg-blue-100" data-group-name="${group.groupName}" title="Editar Grupo"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.5L14.5 6.036z" /></svg></button><button class="delete-group-btn text-red-600 hover:text-red-800 p-1 rounded-full hover:bg-red-100" data-group-name="${group.groupName}" title="Excluir Grupo"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button></div></td></tr>`;
+          });
+        } else {
+          tableHtml += `<tr><td colspan="3" class="text-center text-gray-500 py-6">Nenhum grupo de atividades criado.</td></tr>`;
+        }
+        tableHtml += `</tbody></table></div>`;
+        modalBody.innerHTML = tableHtml;
+        document
+          .querySelectorAll(".edit-group-btn")
+          .forEach((btn) =>
+            btn.addEventListener("click", (e) =>
+              renderGroupEditForm(e.currentTarget.dataset.groupName)
+            )
+          );
+        document
+          .querySelectorAll(".delete-group-btn")
+          .forEach((btn) =>
+            btn.addEventListener("click", (e) =>
+              deleteGroup(e.currentTarget.dataset.groupName)
+            )
+          );
+      }
+
+      function renderGroupEditForm(groupName = null) {
+        const savedMapping = JSON.parse(
+          localStorage.getItem(ACTIVITY_MAPPING_KEY) || "[]"
+        );
+        const group = groupName
+          ? savedMapping.find((g) => g.groupName === groupName)
+          : { groupName: "", taskCodes: [] };
+        currentEditingId = groupName;
+        modalSubtitle.textContent = groupName
+          ? `Editando o grupo "${groupName}"`
+          : "Criando um novo grupo de atividades.";
+        modalSaveBtn.style.display = "inline-flex";
+        modalHeaderActions.innerHTML = "";
+        modalBody.innerHTML = `<div class="space-y-4"><div><label class="font-bold text-gray-700">Nome do Grupo:</label><input type="text" id="group-name-input" value="${group.groupName}" class="w-full p-2 border border-gray-300 rounded-md mt-1" placeholder="Ex: Escavação Total C2+C3"></div><div><label class="font-semibold text-gray-700 mt-2 block">Atividades do Grupo:</label><select id="activity-group-select" multiple></select></div></div>`;
+        const usedTaskCodes = new Set();
+        savedMapping.forEach((g) => {
+          if (g.groupName !== groupName) {
+            g.taskCodes.forEach((code) => usedTaskCodes.add(code));
+          }
+        });
+        const selectEl = document.getElementById("activity-group-select");
+        const allTasks = getLatestProject()?.TASK?.rows || [];
+        const availableTasks = allTasks.filter(
+          (task) => !usedTaskCodes.has(task.task_code)
+        );
+        const options = availableTasks
+          .map((task) => ({
+            value: task.task_code,
+            text: `${task.task_code} - ${task.task_name}`,
+          }))
+          .sort((a, b) => a.text.localeCompare(b.text));
+        const tomSelect = new TomSelect(selectEl, {
+          options,
+          plugins: ["remove_button"],
+          placeholder: "Selecione 2 ou mais atividades...",
+        });
+        tomSelect.setValue(group.taskCodes);
+        activeTomSelects.push(tomSelect);
+      }
+
+      function renderCustomValuesTable() {
+        let savedValues = JSON.parse(
+          localStorage.getItem(CUSTOM_VALUES_KEY) || "[]"
+        );
+        modalSaveBtn.style.display = "none";
+        modalSubtitle.textContent =
+          "Gerencie valores que sobrepõem os dados do cronograma.";
+        document
+          .getElementById("add-custom-value-btn")
+          ?.addEventListener("click", () => renderCustomValueEditForm());
+        const allItems = [
+          ...(getLatestProject()?.TASK?.rows || []).map((t) => ({
+            id: t.task_code,
+            name: `${t.task_code} - ${t.task_name}`,
+          })),
+          ...JSON.parse(localStorage.getItem(ACTIVITY_MAPPING_KEY) || "[]").map(
+            (g) => ({
+              id: `group::${g.groupName}`,
+              name: `[Grupo] ${g.groupName}`,
+            })
+          ),
+        ];
+        const itemsMap = new Map(allItems.map((i) => [i.id, i.name]));
+        savedValues.forEach(
+          (val) => (val.name = itemsMap.get(val.id) || val.id)
+        );
+        savedValues.sort((a, b) => a.name.localeCompare(b.name));
+        let tableHtml = `<div class="table-container"><table><thead><tr><th>Atividade / Grupo</th><th class="text-right">Previsto</th><th class="text-right">Realizado</th><th class="text-right">Ações</th></tr></thead><tbody>`;
+        if (savedValues.length > 0) {
+          savedValues.forEach((val) => {
+            tableHtml += `<tr><td class="font-semibold">${
+              val.name
+            }</td><td class="text-right">${formatNumberBR(
+              val.planned
+            )}</td><td class="text-right">${formatNumberBR(
+              val.actual
+            )}</td><td class="text-right"><div class="flex items-center justify-end gap-2"><button class="edit-custom-value-btn text-blue-600 hover:text-blue-800 p-1 rounded-full hover:bg-blue-100" data-id="${
+              val.id
+            }" title="Editar Valor"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.5L14.5 6.036z" /></svg></button><button class="delete-custom-value-btn text-red-600 hover:text-red-800 p-1 rounded-full hover:bg-red-100" data-id="${
+              val.id
+            }" title="Excluir Valor"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button></div></td></tr>`;
+          });
+        } else {
+          tableHtml += `<tr><td colspan="4" class="text-center text-gray-500 py-6">Nenhum valor personalizado definido.</td></tr>`;
+        }
+        tableHtml += `</tbody></table></div>`;
+        modalBody.innerHTML = tableHtml;
+        document
+          .querySelectorAll(".edit-custom-value-btn")
+          .forEach((btn) =>
+            btn.addEventListener("click", (e) =>
+              renderCustomValueEditForm(e.currentTarget.dataset.id)
+            )
+          );
+        document
+          .querySelectorAll(".delete-custom-value-btn")
+          .forEach((btn) =>
+            btn.addEventListener("click", (e) =>
+              deleteCustomValue(e.currentTarget.dataset.id)
+            )
+          );
+      }
+
+      function renderCustomValueEditForm(id = null) {
+        const savedValues = JSON.parse(
+          localStorage.getItem(CUSTOM_VALUES_KEY) || "[]"
+        );
+        const value = id
+          ? savedValues.find((v) => v.id === id)
+          : { id: null, planned: "", actual: "" };
+        currentEditingId = id;
+        modalSaveBtn.style.display = "inline-flex";
+        modalHeaderActions.innerHTML = "";
+        modalSubtitle.textContent = id
+          ? `Editando valor para "${value.name}"`
+          : "Criando um novo valor personalizado.";
+        modalBody.innerHTML = `<div class="space-y-4"><div><label class="font-bold text-gray-700">Atividade ou Grupo</label><select id="custom-value-select" class="mt-1"></select></div><div class="grid grid-cols-2 gap-4"><div><label class="font-bold text-gray-700">Previsto Personalizado</label><input type="number" step="any" id="custom-planned-input" class="w-full p-2 border border-gray-300 rounded-md mt-1" value="${
+          value.planned ?? ""
+        }" placeholder="Ex: 1500.50"></div><div><label class="font-bold text-gray-700">Realizado Personalizado</label><input type="number" step="any" id="custom-actual-input" class="w-full p-2 border border-gray-300 rounded-md mt-1" value="${
+          value.actual ?? ""
+        }" placeholder="Ex: 750.25"></div></div></div>`;
+        const usedValueIds = new Set(savedValues.map((v) => v.id));
+        if (id) {
+          usedValueIds.delete(id);
+        }
+        const allTasks = (getLatestProject()?.TASK?.rows || []).map((t) => ({
+          value: t.task_code,
+          text: `${t.task_code} - ${t.task_name}`,
+        }));
+        const allGroups = JSON.parse(
+          localStorage.getItem(ACTIVITY_MAPPING_KEY) || "[]"
+        ).map((g) => ({
+          value: `group::${g.groupName}`,
+          text: `[Grupo] ${g.groupName}`,
+        }));
+        const allOptions = [...allTasks, ...allGroups];
+        const availableOptions = allOptions
+          .filter((opt) => !usedValueIds.has(opt.value))
+          .sort((a, b) => a.text.localeCompare(b.text));
+        const tomSelect = new TomSelect("#custom-value-select", {
+          options: availableOptions,
+          placeholder: "Selecione...",
+        });
+        tomSelect.setValue(value.id);
+        if (id) {
+          tomSelect.disable();
+        }
+        activeTomSelects.push(tomSelect);
+      }
+
+      // --- Funções de Salvamento ---
+      function saveGroup() {
+        const groupName = document.getElementById("group-name-input").value;
+        const tomSelect = activeTomSelects[0];
+        const taskCodes = tomSelect ? tomSelect.getValue() : [];
+        if (!groupName.trim()) {
+          showMessage("O nome do grupo não pode ser vazio.", "error");
+          return;
+        }
+        if (taskCodes.length < 2) {
+          showMessage("Um grupo deve ter pelo menos 2 atividades.", "error");
+          return;
+        }
+        let savedMapping = JSON.parse(
+          localStorage.getItem(ACTIVITY_MAPPING_KEY) || "[]"
+        );
+        const newGroup = { groupName, taskCodes };
+        if (currentEditingId !== null) {
+          const index = savedMapping.findIndex(
+            (g) => g.groupName === currentEditingId
+          );
+          if (index > -1) savedMapping[index] = newGroup;
+        } else {
+          savedMapping.push(newGroup);
+        }
+        localStorage.setItem(
+          ACTIVITY_MAPPING_KEY,
+          JSON.stringify(savedMapping)
+        );
+        showMessage("Grupo salvo com sucesso!", "success");
+        openModal(CONFIG_MODULES["activity-mapping"]);
+        renderActivityMappingTable();
+      }
+      function deleteGroup(groupName) {
+        if (confirm(`Tem certeza que deseja excluir o grupo "${groupName}"?`)) {
+          let savedMapping = JSON.parse(
+            localStorage.getItem(ACTIVITY_MAPPING_KEY) || "[]"
+          );
+          const newMapping = savedMapping.filter(
+            (g) => g.groupName !== groupName
+          );
+          localStorage.setItem(
+            ACTIVITY_MAPPING_KEY,
+            JSON.stringify(newMapping)
+          );
+          showMessage("Grupo excluído.", "success");
+          renderActivityMappingTable();
+        }
+      }
+      function saveCustomValue() {
+        const tomSelect = document.getElementById(
+          "custom-value-select"
+        ).tomselect;
+        const selectedId = tomSelect ? tomSelect.getValue() : null;
+        const plannedVal = document.getElementById(
+          "custom-planned-input"
+        ).value;
+        const actualVal = document.getElementById("custom-actual-input").value;
+
+        if (!selectedId) {
+          showMessage("Selecione uma atividade ou grupo.", "error");
+          return;
+        }
+        if (plannedVal.trim() === "" && actualVal.trim() === "") {
+          showMessage(
+            "Preencha pelo menos um dos valores (previsto ou realizado).",
+            "error"
+          );
+          return;
+        }
+
+        let savedValues = JSON.parse(
+          localStorage.getItem(CUSTOM_VALUES_KEY) || "[]"
+        );
+        const newValue = {
+          id: selectedId,
+          planned: plannedVal.trim() !== "" ? parseFloat(plannedVal) : null,
+          actual: actualVal.trim() !== "" ? parseFloat(actualVal) : null,
+        };
+
+        const indexToUpdate = savedValues.findIndex(
+          (v) => v.id === currentEditingId
+        );
+
+        if (indexToUpdate > -1) {
+          savedValues[indexToUpdate] = newValue;
+        } else {
+          savedValues.push(newValue);
+        }
+
+        localStorage.setItem(CUSTOM_VALUES_KEY, JSON.stringify(savedValues));
+        showMessage("Valor personalizado salvo!", "success");
+        openModal(CONFIG_MODULES["custom-values"]);
+        renderCustomValuesTable();
+      }
+      function deleteCustomValue(id) {
+        if (
+          confirm("Tem certeza que deseja excluir este valor personalizado?")
+        ) {
+          let savedValues = JSON.parse(
+            localStorage.getItem(CUSTOM_VALUES_KEY) || "[]"
+          );
+          const newValues = savedValues.filter((v) => v.id !== id);
+          localStorage.setItem(CUSTOM_VALUES_KEY, JSON.stringify(newValues));
+          showMessage("Valor excluído.", "success");
+          renderCustomValuesTable();
+        }
+      }
+
+      // --- Módulos de Configuração ---
+      const CONFIG_MODULES = {
+        weeks: {
+          title: "Mapeamento de Semanas",
+          subtitle:
+            'Carregue um arquivo Excel (.xlsx) com as colunas "Semana" e "Data".',
+          setup: () =>
+            `<div id="weeks-drop-area" class="mt-4 border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-blue-500 transition-colors"><p class="text-gray-500">Arraste e solte o arquivo .xlsx aqui</p><p class="text-gray-400 my-2">- OU -</p><label for="weeks-file-input" class="cursor-pointer bg-blue-100 text-blue-700 font-semibold px-4 py-2 rounded-md hover:bg-blue-200">Selecionar Arquivo</label><input type="file" id="weeks-file-input" accept=".xlsx" class="hidden"/><p id="weeks-file-name" class="mt-4 text-sm font-medium text-gray-700"></p></div>`,
+          save: () => {
+            const input = document.getElementById("weeks-file-input");
+            if (input.files.length > 0) {
+              processAndSaveWeeksFile(input.files[0]);
+            } else {
+              showMessage("Nenhum arquivo selecionado para salvar.", "error");
+            }
+          },
+        },
+        resource: {
+          title: "Recurso Principal de Avanço",
+          subtitle:
+            "Selecione o recurso que representa o avanço físico do projeto.",
+          setup: () => {
+            const resources = getLatestProject()?.RSRC?.rows || [];
+            if (resources.length === 0)
+              return "<p>Nenhum recurso encontrado. Carregue um arquivo .xer primeiro.</p>";
+            const savedResource = localStorage.getItem(MAIN_RESOURCE_KEY) || "";
+            const options = resources
+              .map(
+                (r) =>
+                  `<option value="${r.rsrc_name}" ${
+                    savedResource === r.rsrc_name ? "selected" : ""
+                  }>${r.rsrc_name}</option>`
+              )
+              .join("");
+            return `<select id="modal-resource-select" class="w-full p-2 border border-gray-300 rounded-md">${options}</select>`;
+          },
+          save: () => {
+            const select = document.getElementById("modal-resource-select");
+            if (select && select.value) {
+              localStorage.setItem(MAIN_RESOURCE_KEY, select.value);
+              showMessage("Recurso salvo!", "success");
+            } else {
+              showMessage("Nenhum recurso selecionado.", "error");
+            }
+          },
+        },
+        grouping: {
+          title: "Agrupamento da Visão Semanal",
+          subtitle:
+            'Selecione os níveis da WBS para agrupar as atividades na página "Próximas Semanas".',
+          setup: () => {
+            const wbsHierarchy = getLatestProject()?.WBS_HIERARCHY?.rows || [];
+            if (wbsHierarchy.length === 0)
+              return "<p>Nenhuma hierarquia WBS encontrada. Carregue um arquivo .xer primeiro.</p>";
+            const maxLevel = Math.max(
+              0,
+              ...wbsHierarchy.map((w) => parseInt(w.level, 10))
+            );
+            const savedLevels = JSON.parse(
+              localStorage.getItem(WEEKS_VIEW_GROUPING_KEY) || "[]"
+            );
+            let checkboxesHtml = '<div class="grid grid-cols-4 gap-2">';
+            for (let i = 1; i <= maxLevel; i++) {
+              checkboxesHtml += `<div><input type="checkbox" id="level-${i}" value="${i}" ${
+                savedLevels.includes(i) ? "checked" : ""
+              } class="mr-2"><label for="level-${i}">Nível ${i}</label></div>`;
+            }
+            checkboxesHtml += "</div>";
+            return checkboxesHtml;
+          },
+          save: () => {
+            const selectedLevels = [];
+            document
+              .querySelectorAll('input[type="checkbox"]:checked')
+              .forEach((cb) => {
+                selectedLevels.push(parseInt(cb.value));
+              });
+            localStorage.setItem(
+              WEEKS_VIEW_GROUPING_KEY,
+              JSON.stringify(selectedLevels.sort((a, b) => a - b))
+            );
+            showMessage("Agrupamento salvo com sucesso!", "success");
+          },
+        },
+        "hidden-activities": {
+          title: "Ocultar Atividades",
+          subtitle:
+            "Atividades selecionadas não aparecerão no dashboard de próximas semanas.",
+          setup: () =>
+            `<select id="hidden-activities-select" multiple placeholder="Busque por código ou nome..."></select>`,
+          save: () => {
+            const tomSelect = activeTomSelects[0];
+            if (tomSelect) {
+              localStorage.setItem(
+                WEEKS_VIEW_HIDDEN_ACTIVITIES_KEY,
+                JSON.stringify(tomSelect.getValue())
+              );
+              showMessage("Lista salva!", "success");
+            }
+          },
+        },
+        "activity-mapping": {
+          title: "Mapeamento de Atividades",
+          headerAction: {
+            id: "add-new-group-btn",
+            icon: `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" /></svg>`,
+            tooltip: "Adicionar Novo Grupo",
+          },
+          setup: () => "",
+          save: saveGroup,
+        },
+        "custom-values": {
+          title: "Valores Personalizados",
+          headerAction: {
+            id: "add-custom-value-btn",
+            icon: `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" /></svg>`,
+            tooltip: "Adicionar Novo Valor",
+          },
+          setup: () => "",
+          save: saveCustomValue,
+        },
+        backup: {
+          title: "Importar & Exportar",
+          subtitle:
+            "Salve ou restaure um backup de todos os dados e configurações do sistema.",
+          setup: () => `
+                <div class="space-y-6">
+                    <div>
+                        <h3 class="font-semibold text-lg text-gray-800 mb-2">Exportar Dados</h3>
+                        <p class="text-gray-600 mb-4">Clique no botão para baixar um arquivo .json contendo todos os projetos, configurações e valores personalizados.</p>
+                        <button id="export-btn" class="w-full bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 font-semibold">Exportar Todos os Dados</button>
+                    </div>
+                    <div class="border-t pt-6">
+                        <h3 class="font-semibold text-lg text-gray-800 mb-2">Importar Dados</h3>
+                        <p class="text-gray-600 mb-4">Selecione um arquivo de backup (.json) para restaurar os dados. <strong class="text-red-600">Atenção: Isso substituirá todos os dados atuais.</strong></p>
+                         <input type="file" id="import-file-input" accept=".json" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
+                         <p id="import-file-name" class="mt-2 text-sm text-gray-500"></p>
+                    </div>
+                </div>`,
+          save: () => {
+            if (fileToImport) {
+              const reader = new FileReader();
+              reader.onload = function (e) {
+                try {
+                  const data = JSON.parse(e.target.result);
+                  let importedKeys = 0;
+                  ALL_DATA_KEYS.forEach((key) => {
+                    if (data[key]) {
+                      localStorage.setItem(key, data[key]);
+                      importedKeys++;
+                    }
+                  });
+                  if (importedKeys > 0) {
+                    showMessage(
+                      "Dados importados com sucesso! A página será recarregada.",
+                      "success"
+                    );
+                    setTimeout(() => window.location.reload(), 2000);
+                  } else {
+                    throw new Error(
+                      "O arquivo não parece ser um backup válido."
+                    );
+                  }
+                } catch (err) {
+                  showMessage(`Erro ao importar: ${err.message}`, "error");
+                }
+              };
+              reader.readAsText(fileToImport);
+            } else {
+              showMessage(
+                "Por favor, selecione um arquivo para importar.",
+                "error"
+              );
+            }
+          },
+        },
+      };
+
+      // --- Inicialização da Página e Event Listeners ---
+      window.onload = () => {
+        getLatestProject();
+        const cardConfigs = {
+          "config-weeks": "weeks",
+          "config-resource": "resource",
+          "config-grouping": "grouping",
+          "config-hidden-activities": "hidden-activities",
+          "config-activity-mapping": "activity-mapping",
+          "config-custom-values": "custom-values",
+          "config-backup": "backup",
+        };
+        for (const [cardId, moduleName] of Object.entries(cardConfigs)) {
+          const cardElement = document.getElementById(cardId);
+          if (cardElement) {
+            cardElement.addEventListener("click", () => {
+              const module = CONFIG_MODULES[moduleName];
+              openModal(module);
+
+              if (moduleName === "weeks") {
+                const dropArea = document.getElementById("weeks-drop-area");
+                const fileInput = document.getElementById("weeks-file-input");
+                const fileNameDisplay =
+                  document.getElementById("weeks-file-name");
+                ["dragenter", "dragover", "dragleave", "drop"].forEach(
+                  (eventName) =>
+                    dropArea.addEventListener(
+                      eventName,
+                      (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      },
+                      false
+                    )
+                );
+                ["dragenter", "dragover"].forEach((eventName) =>
+                  dropArea.addEventListener(
+                    eventName,
+                    () =>
+                      dropArea.classList.add("border-blue-500", "bg-blue-50"),
+                    false
+                  )
+                );
+                ["dragleave", "drop"].forEach((eventName) =>
+                  dropArea.addEventListener(
+                    eventName,
+                    () =>
+                      dropArea.classList.remove(
+                        "border-blue-500",
+                        "bg-blue-50"
+                      ),
+                    false
+                  )
+                );
+                dropArea.addEventListener(
+                  "drop",
+                  (e) => {
+                    const files = e.dataTransfer.files;
+                    if (files.length > 0) {
+                      fileInput.files = files;
+                      fileNameDisplay.textContent = files[0].name;
+                    }
+                  },
+                  false
+                );
+                fileInput.addEventListener("change", () => {
+                  if (fileInput.files.length > 0) {
+                    fileNameDisplay.textContent = fileInput.files[0].name;
+                  }
+                });
+              } else if (moduleName === "hidden-activities") {
+                const selectEl = document.getElementById(
+                  "hidden-activities-select"
+                );
+                const allTasks = getLatestProject()?.TASK?.rows || [];
+                const options = allTasks
+                  .sort((a, b) => a.task_code.localeCompare(b.task_code))
+                  .map((t) => ({
+                    value: t.task_code,
+                    text: `${t.task_code} - ${t.task_name}`,
+                  }));
+                if (selectEl) {
+                  const tomSelect = new TomSelect(selectEl, {
+                    options,
+                    plugins: ["remove_button"],
+                  });
+                  tomSelect.setValue(
+                    JSON.parse(
+                      localStorage.getItem(WEEKS_VIEW_HIDDEN_ACTIVITIES_KEY) ||
+                        "[]"
+                    )
+                  );
+                  activeTomSelects.push(tomSelect);
+                }
+              } else if (moduleName === "activity-mapping") {
+                renderActivityMappingTable();
+              } else if (moduleName === "custom-values") {
+                renderCustomValuesTable();
+              } else if (moduleName === "backup") {
+                modalSaveBtn.textContent = "Importar Agora";
+                document.getElementById("export-btn").onclick = () => {
+                  const backupData = {};
+                  ALL_DATA_KEYS.forEach((key) => {
+                    const data = localStorage.getItem(key);
+                    if (data) backupData[key] = data;
+                  });
+                  const blob = new Blob([JSON.stringify(backupData, null, 2)], {
+                    type: "application/json",
+                  });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = `p6_dashboard_backup_${
+                    new Date().toISOString().split("T")[0]
+                  }.json`;
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                  URL.revokeObjectURL(url);
+                  showMessage("Exportação iniciada.", "success");
+                };
+                const importInput =
+                  document.getElementById("import-file-input");
+                importInput.onchange = () => {
+                  if (importInput.files.length > 0) {
+                    fileToImport = importInput.files[0];
+                    document.getElementById(
+                      "import-file-name"
+                    ).textContent = `Arquivo selecionado: ${fileToImport.name}`;
+                  }
+                };
+              }
+            });
+          }
+        }
+        modal.addEventListener("click", (e) => {
+          if (e.target === modal) closeModal();
+        });
+        document
+          .getElementById("modal-close-btn")
+          .addEventListener("click", closeModal);
+        document
+          .getElementById("modal-cancel-btn")
+          .addEventListener("click", closeModal);
+      };
+    </script>
+  </body>
+</html>
