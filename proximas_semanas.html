@@ -3,8 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Dashboard - Próximas Semanas</title>
+    <title>6-Week Look Ahead | ChronoFlow</title>
+    <link rel="icon" type="image/png" href="logo.png" />
     <script src="https://cdn.tailwindcss.com"></script>
+    <link
+      href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.css"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -13,10 +19,11 @@
         <div class="flex flex-wrap justify-between items-center gap-4">
           <div>
             <h1 class="text-3xl font-bold text-gray-800 mb-2">
-              Atividades das Próximas 6 Semanas
+              6-Week Look Ahead (6WLA)
             </h1>
-            <p id="grouping-info" class="text-gray-600">
-              Carregando configuração de agrupamento...
+            <p id="page-subtitle" class="text-gray-600">
+              Análise de restrições das próximas 6 semanas para planejamento
+              proativo.
             </p>
           </div>
           <div
@@ -56,7 +63,7 @@
             class="w-6 h-6 text-gray-700"
             fill="none"
             stroke="currentColor"
-            viewBox="0 0 24 24"
+            viewBox="0 0 24"
             xmlns="http://www.w3.org/2000/svg"
           >
             <path
@@ -69,6 +76,31 @@
         </button>
       </div>
       <div id="week-indicators" class="week-indicators"></div>
+    </div>
+
+    <!-- Modal de Restrições -->
+    <div id="restriction-modal" class="modal-overlay">
+      <div class="modal-content modal-large">
+        <div
+          class="flex-shrink-0 px-6 sm:px-8 pt-6 pb-4 border-b border-gray-200"
+        >
+          <div class="flex justify-between items-start">
+            <div>
+              <h2 class="text-2xl font-bold text-gray-800">
+                Gerenciar Restrições
+              </h2>
+              <p id="modal-item-name" class="text-gray-600 text-sm mt-1"></p>
+            </div>
+            <button
+              id="modal-close-btn"
+              class="text-gray-400 hover:text-gray-700 text-3xl"
+            >
+              &times;
+            </button>
+          </div>
+        </div>
+        <div id="modal-body" class="px-6 sm:px-8 py-6"></div>
+      </div>
     </div>
 
     <!-- App Scripts as a module -->
@@ -93,11 +125,15 @@
       utils.insertHeader();
 
       const dashboardOutput = document.getElementById("dashboard-output");
-      const groupingInfo = document.getElementById("grouping-info");
+      const pageSubtitle = document.getElementById("page-subtitle");
       const prevBtn = document.getElementById("prev-btn");
       const nextBtn = document.getElementById("next-btn");
       const indicatorsContainer = document.getElementById("week-indicators");
       const filterControls = document.getElementById("filter-controls");
+
+      const modal = document.getElementById("restriction-modal");
+      const modalItemName = document.getElementById("modal-item-name");
+      const modalBody = document.getElementById("modal-body");
 
       let fullTaskList = [],
         weeksData = [],
@@ -106,20 +142,38 @@
         wbsMap = new Map(),
         activityMapping = [],
         activityStageMap = new Map(),
-        customValuesData = new Map();
+        customValuesData = new Map(),
+        restrictionsList = [],
+        restrictionLinks = [];
       let currentWeekIndex = 0;
       let groupedByWeek = {};
       let currentFilter = "all";
+      let currentOpenItemId = null;
+      let projectName = "Projeto";
+      let activeTomSelect = null;
+
+      function uuidv4() {
+        return ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, (c) =>
+          (
+            c ^
+            (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (c / 4)))
+          ).toString(16)
+        );
+      }
 
       (async () => {
         try {
           const projectBase = await storage.getProjectBase();
           const projectVersions = await storage.getProjectVersions();
 
-          weeksData = await storage.getData(storage.APP_KEYS.WEEKS_DATA_KEY);
-          activityMapping = await storage.getData(
-            storage.APP_KEYS.ACTIVITY_MAPPING_KEY
-          );
+          [weeksData, activityMapping, restrictionsList, restrictionLinks] =
+            await Promise.all([
+              storage.getData(storage.APP_KEYS.WEEKS_DATA_KEY),
+              storage.getData(storage.APP_KEYS.ACTIVITY_MAPPING_KEY),
+              storage.getData(storage.APP_KEYS.RESTRICTIONS_LIST_KEY),
+              storage.getData(storage.APP_KEYS.RESTRICTION_LINKS_KEY),
+            ]);
+
           const customValuesRaw = await storage.getData(
             storage.APP_KEYS.CUSTOM_VALUES_KEY
           );
@@ -140,7 +194,10 @@
             return;
           }
 
-          // The full task list comes from the static base data.
+          const latestVersionId = utils.getLatestProjectId(projectVersions);
+          const latestVersion = projectVersions[latestVersionId];
+          projectName = latestVersion?.PROJECT?.rows[0]?.proj_name || "Projeto";
+
           fullTaskList = projectBase.TASK?.rows || [];
           wbsHierarchy = projectBase.WBS_HIERARCHY?.rows || [];
           wbsMap = new Map(wbsHierarchy.map((w) => [w.stable_wbs_id, w]));
@@ -188,6 +245,7 @@
           await processAllWeeksData(projectBase, projectVersions);
           renderCurrentWeekView();
           setupNavigation();
+          setupModal();
         } catch (e) {
           console.error(e);
           dashboardOutput.innerHTML = `<div class="message-box" style="color: #b91c1c;">Erro: ${e.message}</div>`;
@@ -208,17 +266,8 @@
             ...wbsHierarchy.map((w) => parseInt(w.level, 10))
           );
           groupingLevels = Array.from({ length: maxLevel }, (_, i) => i + 1);
-          groupingInfo.textContent =
-            "Agrupando por hierarquia completa (padrão).";
-        } else {
-          groupingInfo.innerHTML = `Agrupando por: <strong>${groupingLevels
-            .map((l) => `Nível ${l}`)
-            .join(
-              " &rarr; "
-            )}</strong>. <a href="configuracao.html" class="text-blue-600 hover:underline">Alterar</a>`;
         }
 
-        // We now use the static fullTaskList from projectBase for filtering.
         const tasksToProcess = fullTaskList.filter((task) => {
           if (
             task.status_code === "TK_Complete" ||
@@ -353,6 +402,22 @@
           : "";
 
         let hasContent = false;
+        const linkedRestrictionIds = new Set(
+          restrictionLinks.map((l) => l.itemId)
+        );
+        const pendingRestrictionsCount = restrictionLinks.reduce(
+          (acc, link) => {
+            const restr = restrictionsList.find(
+              (r) => r.id === link.restrictionId
+            );
+            if (restr && restr.status === "pending") {
+              if (!acc[link.itemId]) acc[link.itemId] = 0;
+              acc[link.itemId]++;
+            }
+            return acc;
+          },
+          {}
+        );
 
         const renderNode = (node) => {
           let html = "";
@@ -376,6 +441,22 @@
                 hasContent = true;
                 let tagHtml = "";
                 let tooltipHtml = "";
+
+                const itemId =
+                  item.type === "group"
+                    ? `group::${item.data.groupName}`
+                    : item.relatedTasks[0].task_code;
+                const itemName =
+                  item.type === "group"
+                    ? item.data.groupName
+                    : `${item.relatedTasks[0].task_code}: ${item.relatedTasks[0].task_name}`;
+
+                const pendingCount = pendingRestrictionsCount[itemId] || 0;
+                let restrictionBadge =
+                  pendingCount > 0
+                    ? `<span class="restriction-badge" title="${pendingCount} restrições pendentes">🚩 ${pendingCount}</span>`
+                    : "";
+
                 let itemEntryClass = "item-entry";
 
                 if (item.type === "group") {
@@ -384,7 +465,6 @@
                   );
                   const groupId = `group::${groupName}`;
                   const customValue = customValuesData.get(groupId);
-
                   if (customValue) {
                     const remaining =
                       (customValue.planned || 0) - (customValue.actual || 0);
@@ -394,9 +474,6 @@
                     itemEntryClass += " tooltip has-tooltip";
                   }
 
-                  const stagesInWeek = item.relatedTasks
-                    .map((t) => activityStageMap.get(t.task_code).stage)
-                    .sort((a, b) => a - b);
                   const startsInWeek = item.relatedTasks.some((t) =>
                     t.tag.includes("Início")
                   );
@@ -407,11 +484,15 @@
                     tagHtml += `<span class="tag tag-start">Início</span>`;
                   if (endsInWeek)
                     tagHtml += `<span class="tag tag-end">Fim</span>`;
+
+                  const stagesInWeek = item.relatedTasks
+                    .map((t) => activityStageMap.get(t.task_code).stage)
+                    .sort((a, b) => a - b);
                   const stageText =
                     stagesInWeek.length > 1
                       ? `Etapas ${stagesInWeek.join(", ")}`
                       : `Etapa ${stagesInWeek[0]}`;
-                  html += `<div class="${itemEntryClass}" ${tooltipHtml}><div class="flex justify-between items-center"><p class="font-semibold text-gray-700">${groupName}</p><div>${tagHtml}</div></div><p class="text-sm text-gray-500 italic">${stageText} de ${totalStages}</p></div>`;
+                  html += `<div class="${itemEntryClass}" ${tooltipHtml} data-item-id="${itemId}" data-item-name="${itemName}"><div class="flex justify-between items-center"><p class="font-semibold text-gray-700">${groupName}</p><div>${restrictionBadge}${tagHtml}</div></div><p class="text-sm text-gray-500 italic">${stageText} de ${totalStages}</p></div>`;
                 } else {
                   const task = item.relatedTasks[0];
                   const customValue = customValuesData.get(task.task_code);
@@ -429,7 +510,7 @@
                     tagHtml += `<span class="tag tag-start">Início</span>`;
                   if (task.tag.includes("Fim"))
                     tagHtml += `<span class="tag tag-end">Fim</span>`;
-                  html += `<div class="${itemEntryClass}" ${tooltipHtml}><div class="flex justify-between items-center"><p class="font-semibold text-gray-700">${task.task_code}</p><div>${tagHtml}</div></div><p class="text-sm text-gray-600">${task.task_name}</p></div>`;
+                  html += `<div class="${itemEntryClass}" ${tooltipHtml} data-item-id="${itemId}" data-item-name="${itemName}"><div class="flex justify-between items-center"><p class="font-semibold text-gray-700">${task.task_code}</p><div>${restrictionBadge}${tagHtml}</div></div><p class="text-sm text-gray-600">${task.task_name}</p></div>`;
                 }
               });
               html += "</div>";
@@ -478,7 +559,6 @@
         );
 
         if (isExpanding) {
-          // Expand from the inside out to calculate scrollHeight correctly.
           [...allContentElements].reverse().forEach((content) => {
             const icon =
               content.previousElementSibling.querySelector(".wbs-toggle");
@@ -487,12 +567,10 @@
             content.style.maxHeight = content.scrollHeight + "px";
           });
         } else {
-          // Collapse any order.
           allContentElements.forEach((content) => {
             const icon =
               content.previousElementSibling.querySelector(".wbs-toggle");
             if (content.classList.contains("expanded")) {
-              // Set height explicitly to start transition, then set to 0.
               content.style.maxHeight = content.scrollHeight + "px";
               requestAnimationFrame(() => {
                 content.classList.remove("expanded");
@@ -535,64 +613,47 @@
             });
           });
 
-        // Listener for Toggling Individual Items
         dashboardOutput.addEventListener("click", (e) => {
           const toggleTitle = e.target.closest(".wbs-title");
-          if (!toggleTitle) return;
+          if (toggleTitle) {
+            const content = toggleTitle.nextElementSibling;
+            const icon = toggleTitle.querySelector(".wbs-toggle");
+            if (!content || !content.classList.contains("wbs-content")) return;
+            const isExpanded = content.classList.contains("expanded");
+            if (isExpanded) {
+              content.style.maxHeight = content.scrollHeight + "px";
+              requestAnimationFrame(() => {
+                content.classList.remove("expanded");
+                content.style.maxHeight = "0px";
+                if (icon) icon.textContent = "+";
+              });
+            } else {
+              content.classList.add("expanded");
+              if (icon) icon.textContent = "-";
+              content.style.maxHeight = content.scrollHeight + "px";
+            }
+          }
 
-          const content = toggleTitle.nextElementSibling;
-          const icon = toggleTitle.querySelector(".wbs-toggle");
-          if (!content || !content.classList.contains("wbs-content")) return;
-
-          const isExpanded = content.classList.contains("expanded");
-
-          if (isExpanded) {
-            // To collapse: Set max-height from 'none' or current px value to its current pixel height.
-            // This gives the CSS transition a defined starting value.
-            content.style.maxHeight = content.scrollHeight + "px";
-
-            // In the next frame, set max-height to 0 to start the collapse animation.
-            requestAnimationFrame(() => {
-              content.classList.remove("expanded");
-              content.style.maxHeight = "0px";
-              if (icon) icon.textContent = "+";
-            });
-          } else {
-            // To expand: Add the class and set max-height to its scrollHeight.
-            content.classList.add("expanded");
-            if (icon) icon.textContent = "-";
-            content.style.maxHeight = content.scrollHeight + "px";
+          const itemEntry = e.target.closest(".item-entry");
+          if (itemEntry) {
+            openRestrictionsModal(
+              itemEntry.dataset.itemId,
+              itemEntry.dataset.itemName
+            );
           }
         });
 
-        // Listener for cleaning up after transitions and updating parents.
         dashboardOutput.addEventListener("transitionend", (e) => {
           const content = e.target;
-
-          // Ensure we're dealing with the right element and property
           if (
             !content.classList.contains("wbs-content") ||
             e.propertyName !== "max-height"
-          ) {
+          )
             return;
-          }
-
-          // After an animation, find the parent and update its height
           const parent = content.parentElement.closest(".wbs-content.expanded");
-          if (parent) {
-            // If the parent is expanded, its scrollHeight has now changed.
-            // Re-set its max-height to its new scrollHeight to animate the change.
-            // The 'none' setting will be applied when the PARENT'S transition ends,
-            // creating a chain reaction.
-            parent.style.maxHeight = parent.scrollHeight + "px";
-          }
-
-          // After dealing with the parent, finalize the state of the current element.
-          // If it has finished expanding (is not collapsed), set max-height to 'none'
-          // so it can auto-resize if ITS children change later.
-          if (content.style.maxHeight !== "0px") {
+          if (parent) parent.style.maxHeight = parent.scrollHeight + "px";
+          if (content.style.maxHeight !== "0px")
             content.style.maxHeight = "none";
-          }
         });
 
         filterControls.addEventListener("click", (e) => {
@@ -613,6 +674,275 @@
           .forEach((dot, index) => {
             dot.classList.toggle("active", index === currentWeekIndex);
           });
+      }
+
+      // --- Restriction Modal Functions ---
+      function setupModal() {
+        modal.addEventListener("click", (e) => {
+          if (e.target === modal) closeModal();
+        });
+        document
+          .getElementById("modal-close-btn")
+          .addEventListener("click", closeModal);
+      }
+
+      function openRestrictionsModal(itemId, itemName) {
+        currentOpenItemId = itemId;
+        modalItemName.textContent = itemName;
+        modal.classList.add("active");
+        renderModalContent();
+      }
+
+      function closeModal() {
+        currentOpenItemId = null;
+        if (activeTomSelect) {
+          activeTomSelect.destroy();
+          activeTomSelect = null;
+        }
+        modal.classList.remove("active");
+      }
+
+      function renderModalContent() {
+        if (!currentOpenItemId) return;
+
+        const linkedIds = new Set(
+          restrictionLinks
+            .filter((l) => l.itemId === currentOpenItemId)
+            .map((l) => l.restrictionId)
+        );
+        const linkedRestrictions = restrictionsList.filter((r) =>
+          linkedIds.has(r.id)
+        );
+        const pending = linkedRestrictions
+          .filter((r) => r.status === "pending")
+          .sort((a, b) => new Date(a.due) - new Date(b.due));
+        const resolved = linkedRestrictions
+          .filter((r) => r.status === "resolved")
+          .sort((a, b) => new Date(b.due) - new Date(a.due));
+
+        const renderList = (list) => {
+          if (list.length === 0)
+            return '<p class="text-gray-500 italic text-center py-4">Nenhuma.</p>';
+          return list
+            .map(
+              (r) => `
+                <div class="restriction-item status-${
+                  r.status
+                }" data-restr-id="${r.id}">
+                    <div class="flex-grow">
+                        <p class="font-medium text-gray-800">${r.desc}</p>
+                        <p class="text-sm text-gray-500 mt-1">
+                            <span class="font-semibold">Resp:</span> ${
+                              r.resp
+                            } | 
+                            <span class="font-semibold">Prazo:</span> ${utils.formatBrazilianDate(
+                              r.due
+                            )}
+                        </p>
+                    </div>
+                    <div class="restriction-actions">
+                        <button class="action-btn toggle-status-btn">
+                            ${r.status === "pending" ? "Resolver" : "Reabrir"}
+                        </button>
+                        <button class="action-btn unlink-btn text-yellow-600">Desvincular</button>
+                    </div>
+                </div>`
+            )
+            .join("");
+        };
+
+        const unlinkedRestrictions = restrictionsList.filter(
+          (r) => !linkedIds.has(r.id) && r.status === "pending"
+        );
+        const unlinkedOptions = unlinkedRestrictions
+          .map((r) => `<option value="${r.id}">${r.desc}</option>`)
+          .join("");
+
+        modalBody.innerHTML = `
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-x-8">
+                <div class="space-y-6">
+                    <div>
+                        <h3 class="text-lg font-semibold text-gray-700 mb-2">Vincular Restrição Existente</h3>
+                        ${
+                          unlinkedOptions.length > 0
+                            ? `
+                        <form id="link-restriction-form" class="flex items-end gap-2">
+                            <div class="flex-grow">
+                                <label for="restr-select" class="form-label">Restrições Pendentes</label>
+                                <select id="restr-select">${unlinkedOptions}</select>
+                            </div>
+                            <button type="submit" class="bg-yellow-500 text-white font-semibold py-2 px-4 rounded-md hover:bg-yellow-600 h-10">Vincular</button>
+                        </form>`
+                            : `<p class="text-sm text-gray-500 italic">Nenhuma outra restrição pendente para vincular.</p>`
+                        }
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-semibold text-gray-700 mb-2">Adicionar Nova Restrição</h3>
+                        <form id="add-restriction-form" class="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
+                            <div class="sm:col-span-2">
+                                <label for="restr-desc" class="form-label">Descrição</label>
+                                <input type="text" id="restr-desc" class="form-input" required>
+                            </div>
+                            <div>
+                                <label for="restr-resp" class="form-label">Responsável</label>
+                                <input type="text" id="restr-resp" class="form-input" required>
+                            </div>
+                            <div>
+                                <label for="restr-due" class="form-label">Prazo</label>
+                                <input type="date" id="restr-due" class="form-input" required>
+                            </div>
+                            <div class="sm:col-span-2">
+                                <button type="submit" class="w-full bg-blue-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-blue-700">Adicionar e Vincular</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+                <div class="space-y-6 mt-6 lg:mt-0">
+                     <div>
+                        <h3 class="text-lg font-semibold text-gray-700 mb-2">Pendentes</h3>
+                        <div id="pending-list" class="space-y-2">${renderList(
+                          pending
+                        )}</div>
+                    </div>
+                     <div>
+                        <h3 class="text-lg font-semibold text-gray-700 mb-2">Resolvidas</h3>
+                        <div id="resolved-list" class="space-y-2">${renderList(
+                          resolved
+                        )}</div>
+                    </div>
+                </div>
+            </div>`;
+
+        if (unlinkedOptions.length > 0 && !activeTomSelect) {
+          activeTomSelect = new TomSelect("#restr-select", {
+            placeholder: "Selecione...",
+          });
+        }
+
+        document
+          .getElementById("add-restriction-form")
+          .addEventListener("submit", handleSaveRestriction);
+        if (document.getElementById("link-restriction-form")) {
+          document
+            .getElementById("link-restriction-form")
+            .addEventListener("submit", handleLinkRestriction);
+        }
+        modalBody.addEventListener("click", handleModalActions);
+      }
+
+      function handleModalActions(e) {
+        const restrictionItem = e.target.closest(".restriction-item");
+        if (!restrictionItem) return;
+        const restrictionId = restrictionItem.dataset.restrId;
+
+        if (e.target.classList.contains("toggle-status-btn")) {
+          toggleRestrictionStatus(restrictionId);
+        } else if (e.target.classList.contains("unlink-btn")) {
+          unlinkRestriction(restrictionId);
+        }
+      }
+
+      async function handleSaveRestriction(e) {
+        e.preventDefault();
+        const desc = document.getElementById("restr-desc").value;
+        const resp = document.getElementById("restr-resp").value;
+        const due = document.getElementById("restr-due").value;
+
+        if (!desc || !resp || !due) return;
+
+        const newRestriction = {
+          id: uuidv4(),
+          desc,
+          resp,
+          due,
+          status: "pending",
+        };
+        restrictionsList.push(newRestriction);
+        restrictionLinks.push({
+          restrictionId: newRestriction.id,
+          itemId: currentOpenItemId,
+        });
+
+        await Promise.all([
+          storage.saveData(
+            storage.APP_KEYS.RESTRICTIONS_LIST_KEY,
+            restrictionsList
+          ),
+          storage.saveData(
+            storage.APP_KEYS.RESTRICTION_LINKS_KEY,
+            restrictionLinks
+          ),
+        ]);
+
+        e.target.reset();
+        if (activeTomSelect) {
+          activeTomSelect.destroy();
+          activeTomSelect = null;
+        }
+        renderModalContent();
+        renderCurrentWeekView();
+      }
+
+      async function handleLinkRestriction(e) {
+        e.preventDefault();
+        const selectedId = activeTomSelect.getValue();
+        if (!selectedId) return;
+
+        restrictionLinks.push({
+          restrictionId: selectedId,
+          itemId: currentOpenItemId,
+        });
+        await storage.saveData(
+          storage.APP_KEYS.RESTRICTION_LINKS_KEY,
+          restrictionLinks
+        );
+
+        activeTomSelect.destroy();
+        activeTomSelect = null;
+        renderModalContent();
+        renderCurrentWeekView();
+      }
+
+      async function toggleRestrictionStatus(restrictionId) {
+        const restriction = restrictionsList.find(
+          (r) => r.id === restrictionId
+        );
+        if (restriction) {
+          restriction.status =
+            restriction.status === "pending" ? "resolved" : "pending";
+          await storage.saveData(
+            storage.APP_KEYS.RESTRICTIONS_LIST_KEY,
+            restrictionsList
+          );
+          renderModalContent();
+          renderCurrentWeekView();
+        }
+      }
+
+      async function unlinkRestriction(restrictionId) {
+        if (
+          confirm(
+            "Tem certeza que deseja desvincular esta restrição desta atividade? A restrição não será excluída."
+          )
+        ) {
+          restrictionLinks = restrictionLinks.filter(
+            (l) =>
+              !(
+                l.itemId === currentOpenItemId &&
+                l.restrictionId === restrictionId
+              )
+          );
+          await storage.saveData(
+            storage.APP_KEYS.RESTRICTION_LINKS_KEY,
+            restrictionLinks
+          );
+          if (activeTomSelect) {
+            activeTomSelect.destroy();
+            activeTomSelect = null;
+          }
+          renderModalContent();
+          renderCurrentWeekView();
+        }
       }
     </script>
   </body>

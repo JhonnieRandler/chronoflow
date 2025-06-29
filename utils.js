@@ -15,7 +15,7 @@ export function insertHeader() {
     },
     {
       href: "proximas_semanas.html",
-      text: "Próximas Semanas",
+      text: "6-Week Look Ahead",
       icon: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>',
     },
     {
@@ -43,11 +43,25 @@ export function insertHeader() {
   const navHtml = `
     <nav class="vertical-nav" aria-label="Navegação Principal">
       <div class="nav-header">
+         <a href="index.html" class="nav-brand">
+            <span class="nav-icon">
+                <img src="logo.png" alt="ChronoFlow Logo" class="h-8 w-8">
+            </span>
+            <span class="nav-text">ChronoFlow</span>
+        </a>
          <button class="mobile-nav-close-btn" aria-label="Fechar menu">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
         </button>
+      </div>
+      <div class="nav-brand-container">
+        <a href="index.html" class="nav-brand">
+            <span class="nav-icon">
+                <img src="logo.png" alt="ChronoFlow Logo" class="h-8 w-8">
+            </span>
+            <span class="nav-text">ChronoFlow</span>
+        </a>
       </div>
       <div class="nav-links-container">
           ${navLinks

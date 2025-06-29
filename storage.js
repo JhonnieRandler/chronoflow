@@ -27,6 +27,8 @@ const APP_KEYS = {
   WEEKS_VIEW_HIDDEN_ACTIVITIES_KEY: "weeksViewHiddenActivities",
   ACTIVITY_MAPPING_KEY: "activityMapping",
   CUSTOM_VALUES_KEY: "customActivityValues",
+  RESTRICTIONS_LIST_KEY: "restrictionsList",
+  RESTRICTION_LINKS_KEY: "restrictionLinks",
 };
 
 // This list is used to validate keys during import.
@@ -39,6 +41,8 @@ const STORAGE_DEFAULTS = {
   [APP_KEYS.WEEKS_VIEW_HIDDEN_ACTIVITIES_KEY]: [],
   [APP_KEYS.ACTIVITY_MAPPING_KEY]: [],
   [APP_KEYS.CUSTOM_VALUES_KEY]: [],
+  [APP_KEYS.RESTRICTIONS_LIST_KEY]: [],
+  [APP_KEYS.RESTRICTION_LINKS_KEY]: [],
 };
 
 // If Firebase fails to initialize, db will be undefined, and we must handle this gracefully.
