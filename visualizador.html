@@ -13,14 +13,15 @@
         Visualizador de Tabelas P6
       </h1>
       <p class="text-gray-600 mb-8">
-        Selecione um projeto e uma tabela para visualizar e filtrar os dados.
+        Selecione uma versão do projeto e uma tabela para visualizar e filtrar
+        os dados.
       </p>
       <div class="controls-section">
-        <label for="project-select" class="font-medium text-gray-700"
-          >Escolha o Projeto:</label
+        <label for="version-select" class="font-medium text-gray-700"
+          >Escolha a Versão:</label
         >
-        <select id="project-select" class="flex-1 max-w-xs">
-          <option value="">-- Selecione um projeto --</option>
+        <select id="version-select" class="flex-1 max-w-xs">
+          <option value="">-- Selecione uma versão --</option>
         </select>
         <label for="table-select" class="font-medium text-gray-700"
           >Escolha a Tabela:</label
@@ -48,22 +49,47 @@
       </section>
     </div>
 
-    <script src="storage.js"></script>
-    <script src="utils.js"></script>
-    <script>
-      insertHeader();
+    <!-- App Scripts as a module -->
+    <script type="module">
+      import {
+        initializationError,
+        showFirebaseError,
+      } from "./firebase-config.js";
+      import * as utils from "./utils.js";
 
-      const projectSelect = document.getElementById("project-select");
+      // First, check if Firebase is configured. If not, show an error and stop.
+      if (initializationError) {
+        utils.insertHeader(); // Show nav so user isn't stuck
+        showFirebaseError();
+        throw initializationError; // Halt script execution
+      }
+
+      // If no error, import other modules and run the app
+      import { storage } from "./storage.js";
+
+      // ===== Page Script Starts Here =====
+      utils.insertHeader();
+
+      const versionSelect = document.getElementById("version-select");
       const tableSelect = document.getElementById("table-select");
       const filterInput = document.getElementById("filter-input");
       const tableOutput = document.getElementById("table-output");
       const currentTableTitle = document.getElementById("current-table-title");
 
-      let allProjectsData = {};
-      let allTaskRsrcData = [];
-      let currentSelectedProjectId = null;
-      let currentSelectedTableData = null;
+      let projectBase = null;
+      let projectVersions = {};
+      let currentSelectedVersionId = null;
       let currentSelectedTableName = null;
+
+      const STATIC_TABLES = [
+        "RSRC",
+        "TASK",
+        "WBS_HIERARCHY",
+        "PROJWBS",
+        "ACTVCODE",
+        "TASKACTV",
+      ];
+      const DYNAMIC_TABLES = ["PROJECT", "TASKPRED", "TASKRSRC"];
 
       const COLUMNS_TO_SAVE_MAP = {
         PROJECT: [
@@ -116,117 +142,125 @@
       };
 
       const ALL_POSSIBLE_TABLE_NAMES = [
-        "PROJECT",
-        "RSRC",
-        "TASK",
-        "TASKPRED",
-        "WBS_HIERARCHY",
-        "PROJWBS",
-        "ACTVCODE",
-        "TASKACTV",
-        "TASKRSRC",
+        ...new Set([...STATIC_TABLES, ...DYNAMIC_TABLES]),
       ];
 
-      function loadAllDataFromLocalStorage() {
+      async function loadAllData() {
         try {
-          allProjectsData = storage.getData(storage.APP_KEYS.PROJECTS_DATA_KEY);
-          allTaskRsrcData = storage.getData(storage.APP_KEYS.TASKRSRC_DATA_KEY);
+          projectBase = await storage.getProjectBase();
+          projectVersions = await storage.getProjectVersions();
 
-          populateProjectSelect(allProjectsData);
+          if (!projectBase || Object.keys(projectBase).length === 0) {
+            tableOutput.innerHTML = `<p class="message-box info">Nenhum dado base de projeto encontrado. Por favor, envie um arquivo .xer.</p>`;
+            disableControls();
+            return;
+          }
+          const versionIds = Object.keys(projectVersions);
+          if (versionIds.length === 0) {
+            tableOutput.innerHTML = `<p class="message-box info">Nenhuma versão de projeto encontrada. Por favor, envie um arquivo .xer.</p>`;
+            disableControls();
+            return;
+          }
 
-          const projectIds = Object.keys(allProjectsData);
-          if (projectIds.length > 0) {
-            const latestProjectId = getLatestProjectId(allProjectsData);
+          populateVersionSelect(projectVersions);
 
-            if (latestProjectId) {
-              projectSelect.value = latestProjectId;
-              currentSelectedProjectId = latestProjectId;
-              populateTableSelect(allProjectsData[latestProjectId]);
-              tableSelect.disabled = false;
-              filterInput.disabled = false;
+          const latestVersionId = utils.getLatestProjectId(projectVersions);
+          if (latestVersionId) {
+            versionSelect.value = latestVersionId;
+            currentSelectedVersionId = latestVersionId;
+            populateTableSelect();
+            tableSelect.disabled = false;
+            filterInput.disabled = false;
 
-              const defaultTable =
-                ["TASK", "PROJECT"].find(
-                  (name) =>
-                    allProjectsData[latestProjectId][name]?.rows.length > 0
-                ) ||
-                Object.keys(allProjectsData[latestProjectId]).find(
-                  (name) =>
-                    allProjectsData[latestProjectId][name].rows.length > 0
-                ) ||
-                (allTaskRsrcData.some((row) => row.proj_id === latestProjectId)
-                  ? "TASKRSRC"
-                  : null);
-
-              if (defaultTable) {
-                tableSelect.value = defaultTable;
-                currentSelectedTableName = defaultTable;
-                currentSelectedTableData =
-                  allProjectsData[latestProjectId][defaultTable] || null;
-                renderTable();
-              } else {
-                tableOutput.innerHTML =
-                  '<p class="message-box info">Nenhuma tabela encontrada para o projeto selecionado.</p>';
+            const defaultTable = ["TASK", "TASKRSRC", "PROJECT"].find(
+              (name) => {
+                const tableData = getTableData(name, latestVersionId);
+                return tableData && tableData.rows.length > 0;
               }
+            );
+
+            if (defaultTable) {
+              tableSelect.value = defaultTable;
+              currentSelectedTableName = defaultTable;
+              renderTable();
             } else {
               tableOutput.innerHTML =
-                '<p class="message-box info">Nenhuma informação de projeto com data de recálculo válida encontrada.</p>';
+                '<p class="message-box info">Nenhuma tabela com dados encontrada para esta versão.</p>';
             }
-          } else {
-            tableOutput.innerHTML =
-              '<p class="message-box info">Nenhum dado de projeto encontrado. Por favor, envie um arquivo .xer.</p>';
-            projectSelect.disabled = true;
-            tableSelect.disabled = true;
-            filterInput.disabled = true;
           }
         } catch (error) {
-          console.error("Erro ao carregar dados do localStorage:", error);
+          console.error("Erro ao carregar dados:", error);
           tableOutput.innerHTML = `<p class="message-box error">Erro ao carregar dados salvos: ${error.message}.</p>`;
         }
       }
 
-      function populateProjectSelect(projectsData) {
-        projectSelect.innerHTML =
-          '<option value="">-- Selecione um projeto --</option>';
-        Object.keys(projectsData)
-          .sort()
-          .forEach((projId) => {
+      function disableControls() {
+        versionSelect.disabled = true;
+        tableSelect.disabled = true;
+        filterInput.disabled = true;
+      }
+
+      function populateVersionSelect(versions) {
+        versionSelect.innerHTML =
+          '<option value="">-- Selecione uma versão --</option>';
+        Object.keys(versions)
+          .sort((a, b) => {
+            const dateA = new Date(
+              versions[a].PROJECT?.rows[0]?.last_recalc_date.replace(
+                " ",
+                "T"
+              ) || 0
+            );
+            const dateB = new Date(
+              versions[b].PROJECT?.rows[0]?.last_recalc_date.replace(
+                " ",
+                "T"
+              ) || 0
+            );
+            return dateB - dateA;
+          })
+          .forEach((versionId) => {
             const option = document.createElement("option");
-            option.value = projId;
-            option.textContent = projId;
-            projectSelect.appendChild(option);
+            const versionDate =
+              versions[versionId].PROJECT?.rows[0]?.last_recalc_date;
+            option.value = versionId;
+            option.textContent = `${versionId} (${utils.formatBrazilianDate(
+              versionDate
+            )})`;
+            versionSelect.appendChild(option);
           });
       }
 
-      function populateTableSelect(projectTables) {
+      function populateTableSelect() {
         tableSelect.innerHTML =
           '<option value="">-- Selecione uma tabela --</option>';
-        const availableTableNames = Object.keys(projectTables).filter(
-          (name) => projectTables[name]?.rows?.length > 0
-        );
-        if (
-          currentSelectedProjectId &&
-          allTaskRsrcData.some(
-            (row) => row.proj_id === currentSelectedProjectId
-          )
-        ) {
-          if (!availableTableNames.includes("TASKRSRC"))
-            availableTableNames.push("TASKRSRC");
-        }
-        ALL_POSSIBLE_TABLE_NAMES.forEach((displayTableName) => {
-          if (availableTableNames.includes(displayTableName)) {
+        if (!currentSelectedVersionId) return;
+
+        ALL_POSSIBLE_TABLE_NAMES.forEach((tableName) => {
+          const tableData = getTableData(tableName, currentSelectedVersionId);
+          if (tableData && tableData.rows.length > 0) {
             const option = document.createElement("option");
-            option.value = displayTableName;
-            option.textContent = displayTableName;
+            option.value = tableName;
+            option.textContent = tableName;
             tableSelect.appendChild(option);
           }
         });
       }
 
+      function getTableData(tableName, versionId) {
+        if (STATIC_TABLES.includes(tableName)) {
+          return projectBase[tableName];
+        }
+        if (DYNAMIC_TABLES.includes(tableName)) {
+          return projectVersions[versionId]?.[tableName];
+        }
+        return null;
+      }
+
       function renderTable() {
-        if (!currentSelectedTableName || !currentSelectedProjectId) {
+        if (!currentSelectedTableName || !currentSelectedVersionId) {
           tableOutput.innerHTML =
-            '<p class="message-box info">Selecione um projeto e uma tabela para visualizar.</p>';
+            '<p class="message-box info">Selecione uma versão e uma tabela para visualizar.</p>';
           currentTableTitle.classList.add("hidden");
           return;
         }
@@ -234,20 +268,20 @@
         currentTableTitle.classList.remove("hidden");
 
         const filterValue = filterInput.value.toLowerCase().trim();
-        let headers = [];
-        let rowsToProcess =
-          currentSelectedTableName === "TASKRSRC"
-            ? allTaskRsrcData.filter(
-                (item) => item.proj_id === currentSelectedProjectId
-              )
-            : allProjectsData[currentSelectedProjectId][
-                currentSelectedTableName
-              ]?.rows || [];
+        const tableData = getTableData(
+          currentSelectedTableName,
+          currentSelectedVersionId
+        );
 
-        headers =
-          COLUMNS_TO_SAVE_MAP[currentSelectedTableName]?.filter((h) =>
-            rowsToProcess.some((row) => row.hasOwnProperty(h))
-          ) || (rowsToProcess.length > 0 ? Object.keys(rowsToProcess[0]) : []);
+        if (!tableData || !tableData.rows || tableData.rows.length === 0) {
+          tableOutput.innerHTML = `<p class="message-box info">A tabela "${currentSelectedTableName}" não contém dados para esta versão.</p>`;
+          return;
+        }
+
+        let rowsToProcess = tableData.rows;
+        let headers =
+          COLUMNS_TO_SAVE_MAP[currentSelectedTableName] ||
+          (rowsToProcess.length > 0 ? Object.keys(rowsToProcess[0]) : []);
 
         const finalFilteredRows = rowsToProcess.filter((rowObject) => {
           if (!filterValue) return true;
@@ -282,12 +316,12 @@
         tableOutput.innerHTML = tableHtml;
       }
 
-      projectSelect.addEventListener("change", function () {
-        currentSelectedProjectId = this.value;
-        if (currentSelectedProjectId) {
+      versionSelect.addEventListener("change", function () {
+        currentSelectedVersionId = this.value;
+        if (currentSelectedVersionId) {
           tableSelect.disabled = false;
           filterInput.disabled = false;
-          populateTableSelect(allProjectsData[currentSelectedProjectId]);
+          populateTableSelect();
           tableOutput.innerHTML =
             '<p class="message-box info">Selecione uma tabela para visualizar.</p>';
           currentTableTitle.classList.add("hidden");
@@ -307,7 +341,9 @@
       });
       filterInput.addEventListener("input", renderTable);
 
-      loadAllDataFromLocalStorage();
+      (async () => {
+        await loadAllData();
+      })();
     </script>
   </body>
 </html>

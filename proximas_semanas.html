@@ -70,10 +70,27 @@
       </div>
       <div id="week-indicators" class="week-indicators"></div>
     </div>
-    <script src="storage.js"></script>
-    <script src="utils.js"></script>
-    <script>
-      insertHeader();
+
+    <!-- App Scripts as a module -->
+    <script type="module">
+      import {
+        initializationError,
+        showFirebaseError,
+      } from "./firebase-config.js";
+      import * as utils from "./utils.js";
+
+      // First, check if Firebase is configured. If not, show an error and stop.
+      if (initializationError) {
+        utils.insertHeader(); // Show nav so user isn't stuck
+        showFirebaseError();
+        throw initializationError; // Halt script execution
+      }
+
+      // If no error, import other modules and run the app
+      import { storage } from "./storage.js";
+
+      // ===== Page Script Starts Here =====
+      utils.insertHeader();
 
       const dashboardOutput = document.getElementById("dashboard-output");
       const groupingInfo = document.getElementById("grouping-info");
@@ -94,23 +111,28 @@
       let groupedByWeek = {};
       let currentFilter = "all";
 
-      (() => {
+      (async () => {
         try {
-          const allProjectsData = storage.getData(
-            storage.APP_KEYS.PROJECTS_DATA_KEY
-          );
-          weeksData = storage.getData(storage.APP_KEYS.WEEKS_DATA_KEY);
-          activityMapping = storage.getData(
+          const projectBase = await storage.getProjectBase();
+          const projectVersions = await storage.getProjectVersions();
+
+          weeksData = await storage.getData(storage.APP_KEYS.WEEKS_DATA_KEY);
+          activityMapping = await storage.getData(
             storage.APP_KEYS.ACTIVITY_MAPPING_KEY
           );
+          const customValuesRaw = await storage.getData(
+            storage.APP_KEYS.CUSTOM_VALUES_KEY
+          );
           customValuesData = new Map(
-            storage
-              .getData(storage.APP_KEYS.CUSTOM_VALUES_KEY)
-              .map((item) => [item.id, item])
+            customValuesRaw.map((item) => [item.id, item])
           );
 
-          if (Object.keys(allProjectsData).length === 0) {
-            dashboardOutput.innerHTML = `<div class="message-box col-span-full">Nenhum projeto encontrado.</div>`;
+          if (!projectBase || Object.keys(projectBase).length === 0) {
+            dashboardOutput.innerHTML = `<div class="message-box col-span-full">Nenhum projeto base encontrado. Faça o upload de um arquivo .xer.</div>`;
+            return;
+          }
+          if (Object.keys(projectVersions).length === 0) {
+            dashboardOutput.innerHTML = `<div class="message-box col-span-full">Nenhuma versão de projeto encontrada. Faça o upload de um arquivo .xer.</div>`;
             return;
           }
           if (weeksData.length === 0) {
@@ -118,18 +140,12 @@
             return;
           }
 
-          const latestProjectId = getLatestProjectId(allProjectsData);
-          if (!latestProjectId) {
-            dashboardOutput.innerHTML = `<div class="message-box col-span-full">Não foi possível encontrar o projeto mais recente.</div>`;
-            return;
-          }
-
-          fullTaskList = allProjectsData[latestProjectId]?.TASK?.rows || [];
-          wbsHierarchy =
-            allProjectsData[latestProjectId]?.WBS_HIERARCHY?.rows || [];
+          // The full task list comes from the static base data.
+          fullTaskList = projectBase.TASK?.rows || [];
+          wbsHierarchy = projectBase.WBS_HIERARCHY?.rows || [];
           wbsMap = new Map(wbsHierarchy.map((w) => [w.stable_wbs_id, w]));
 
-          const currentWeek = getWeekForDate(new Date(), weeksData);
+          const currentWeek = utils.getWeekForDate(new Date(), weeksData);
           if (currentWeek === null) {
             dashboardOutput.innerHTML = `<div class="message-box">Data atual fora do mapeamento.</div>`;
             return;
@@ -142,7 +158,10 @@
 
           fullTaskList.forEach(
             (task) =>
-              (task.wbsPath = getWbsPathObjects(task.wbs_stable_id_ref, wbsMap))
+              (task.wbsPath = utils.getWbsPathObjects(
+                task.wbs_stable_id_ref,
+                wbsMap
+              ))
           );
           activityMapping.forEach((group) => {
             const tasksInGroup = group.taskCodes
@@ -166,7 +185,7 @@
             });
           });
 
-          processAllWeeksData();
+          await processAllWeeksData(projectBase, projectVersions);
           renderCurrentWeekView();
           setupNavigation();
         } catch (e) {
@@ -175,11 +194,11 @@
         }
       })();
 
-      function processAllWeeksData() {
-        let groupingLevels = storage.getData(
+      async function processAllWeeksData(projectBase, projectVersions) {
+        let groupingLevels = await storage.getData(
           storage.APP_KEYS.WEEKS_VIEW_GROUPING_KEY
         );
-        const hiddenActivities = storage.getData(
+        const hiddenActivities = await storage.getData(
           storage.APP_KEYS.WEEKS_VIEW_HIDDEN_ACTIVITIES_KEY
         );
 
@@ -198,6 +217,8 @@
               " &rarr; "
             )}</strong>. <a href="configuracao.html" class="text-blue-600 hover:underline">Alterar</a>`;
         }
+
+        // We now use the static fullTaskList from projectBase for filtering.
         const tasksToProcess = fullTaskList.filter((task) => {
           if (
             task.status_code === "TK_Complete" ||
@@ -207,11 +228,11 @@
           const startDateStr = task.act_start_date || task.restart_date;
           const endDateStr = task.reend_date || task.target_end_date;
           if (!startDateStr || !endDateStr) return false;
-          const startWeek = getWeekForDate(
+          const startWeek = utils.getWeekForDate(
             startDateStr.replace(" ", "T"),
             weeksData
           );
-          const endWeek = getWeekForDate(
+          const endWeek = utils.getWeekForDate(
             endDateStr.replace(" ", "T"),
             weeksData
           );
@@ -227,8 +248,8 @@
           const endDate = new Date(
             (task.reend_date || task.target_end_date).replace(" ", "T")
           );
-          const startWeek = getWeekForDate(startDate, weeksData);
-          const endWeek = getWeekForDate(endDate, weeksData);
+          const startWeek = utils.getWeekForDate(startDate, weeksData);
+          const endWeek = utils.getWeekForDate(endDate, weeksData);
           for (let weekNum = startWeek; weekNum <= endWeek; weekNum++) {
             if (upcomingWeeks.includes(weekNum)) {
               let tag = weekNum === startWeek ? "Início" : "";
@@ -326,9 +347,9 @@
           (w) => parseInt(w.Semana, 10) === weekNumber
         );
         const dateRange = weekInfo
-          ? `(${formatBrazilianDate(
+          ? `(${utils.formatBrazilianDate(
               weekInfo.Data_Inicio
-            )} - ${formatBrazilianDate(weekInfo.Data_Fim)})`
+            )} - ${utils.formatBrazilianDate(weekInfo.Data_Fim)})`
           : "";
 
         let hasContent = false;
@@ -367,7 +388,7 @@
                   if (customValue) {
                     const remaining =
                       (customValue.planned || 0) - (customValue.actual || 0);
-                    tooltipHtml = `data-tooltip="Saldo Topográfico: ${formatNumberBR(
+                    tooltipHtml = `data-tooltip="Saldo Topográfico: ${utils.formatNumberBR(
                       remaining
                     )}"`;
                     itemEntryClass += " tooltip has-tooltip";
@@ -398,7 +419,7 @@
                   if (customValue) {
                     const remaining =
                       (customValue.planned || 0) - (customValue.actual || 0);
-                    tooltipHtml = `data-tooltip="Saldo Topográfico: ${formatNumberBR(
+                    tooltipHtml = `data-tooltip="Saldo Topográfico: ${utils.formatNumberBR(
                       remaining
                     )}"`;
                     itemEntryClass += " tooltip has-tooltip";

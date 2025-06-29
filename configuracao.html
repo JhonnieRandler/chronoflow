@@ -241,7 +241,8 @@
             </button>
             <button
               id="modal-save-btn"
-              class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+              disabled
             >
               Salvar
             </button>
@@ -249,12 +250,29 @@
         </div>
       </div>
     </div>
-    <script src="storage.js"></script>
-    <script src="utils.js"></script>
-    <script>
-      insertHeader();
 
-      let latestProjectData = null;
+    <!-- App Scripts as a module -->
+    <script type="module">
+      import {
+        initializationError,
+        showFirebaseError,
+      } from "./firebase-config.js";
+      import * as utils from "./utils.js";
+
+      // First, check if Firebase is configured. If not, show an error and stop.
+      if (initializationError) {
+        utils.insertHeader(); // Show nav so user isn't stuck
+        showFirebaseError();
+        throw initializationError; // Halt script execution
+      }
+
+      // If no error, import other modules and run the app
+      import { storage } from "./storage.js";
+
+      // ===== Page Script Starts Here =====
+      utils.insertHeader();
+
+      let projectBaseData = null;
       let activeTomSelects = [];
       let currentEditingId = null;
       let fileToImport = null;
@@ -276,28 +294,52 @@
         }, 5000);
       }
 
-      function getLatestProject() {
-        if (latestProjectData) return latestProjectData;
-        const allProjectsData = storage.getData(
-          storage.APP_KEYS.PROJECTS_DATA_KEY
-        );
-        const latestProjectId = getLatestProjectId(allProjectsData);
-        if (latestProjectId) {
-          latestProjectData = allProjectsData[latestProjectId];
-          return latestProjectData;
-        }
-        return null;
+      async function getProjectBase() {
+        if (projectBaseData) return projectBaseData;
+        projectBaseData = await storage.getProjectBase();
+        return projectBaseData;
       }
 
-      function openModal(module) {
+      /**
+       * Enables the save button once a change is detected in the modal body.
+       * The listeners remove themselves after the first interaction for efficiency.
+       */
+      function activateChangeDetection() {
+        if (!modalSaveBtn.onclick) return;
+
+        modalSaveBtn.disabled = true;
+
+        const enableButton = () => {
+          modalSaveBtn.disabled = false;
+        };
+
+        modalBody.addEventListener("change", enableButton, { once: true });
+        modalBody.addEventListener("input", enableButton, { once: true });
+      }
+
+      async function openModal(module) {
         modalTitle.textContent = module.title;
         modalSubtitle.textContent = module.subtitle || "";
-        modalBody.innerHTML = module.setup();
-        modalHeaderActions.innerHTML = "";
+        modalBody.innerHTML = "Carregando..."; // Show loading indicator
 
+        // Show modal structure immediately
+        modal.classList.add("active");
         if (module.needsMoreHeight) {
           modal.classList.add("modal-large");
         }
+
+        // Reset footer visibility for every modal opening
+        document.getElementById("modal-footer").style.display = "";
+
+        const projectData = await getProjectBase();
+        if (!projectData || Object.keys(projectData).length === 0) {
+          modalBody.innerHTML = `<p class="message-box error">Nenhum dado de projeto base encontrado. Por favor, carregue um arquivo .xer na página principal primeiro.</p>`;
+          modalSaveBtn.style.display = "none";
+          return;
+        }
+
+        modalBody.innerHTML = await module.setup(projectData);
+        modalHeaderActions.innerHTML = "";
 
         if (module.headerAction) {
           const btn = document.createElement("button");
@@ -311,9 +353,15 @@
         activeTomSelects.forEach((ts) => ts.destroy());
         activeTomSelects = [];
         modalMessageArea.innerHTML = "";
-        modalSaveBtn.style.display = "inline-flex";
-        modalSaveBtn.onclick = module.save;
-        modal.classList.add("active");
+
+        if (module.save) {
+          modalSaveBtn.style.display = "inline-flex";
+          modalSaveBtn.onclick = module.save;
+          activateChangeDetection();
+        } else {
+          modalSaveBtn.style.display = "none";
+          modalSaveBtn.onclick = null;
+        }
       }
 
       function closeModal() {
@@ -322,8 +370,8 @@
         fileToImport = null;
       }
 
-      function renderActivityMappingTable() {
-        let savedMapping = storage.getData(
+      async function renderActivityMappingTable() {
+        let savedMapping = await storage.getData(
           storage.APP_KEYS.ACTIVITY_MAPPING_KEY
         );
         modalSaveBtn.style.display = "none";
@@ -361,8 +409,8 @@
           );
       }
 
-      function renderGroupEditForm(groupName = null) {
-        const savedMapping = storage.getData(
+      async function renderGroupEditForm(groupName = null) {
+        const savedMapping = await storage.getData(
           storage.APP_KEYS.ACTIVITY_MAPPING_KEY
         );
         const group = groupName
@@ -382,7 +430,7 @@
           }
         });
         const selectEl = document.getElementById("activity-group-select");
-        const allTasks = getLatestProject()?.TASK?.rows || [];
+        const allTasks = (await getProjectBase())?.TASK?.rows || [];
         const availableTasks = allTasks.filter(
           (task) => !usedTaskCodes.has(task.task_code)
         );
@@ -399,27 +447,34 @@
         });
         tomSelect.setValue(group.taskCodes);
         activeTomSelects.push(tomSelect);
+        activateChangeDetection();
       }
 
-      function renderCustomValuesTable() {
-        let savedValues = storage.getData(storage.APP_KEYS.CUSTOM_VALUES_KEY);
+      async function renderCustomValuesTable() {
+        let savedValues = await storage.getData(
+          storage.APP_KEYS.CUSTOM_VALUES_KEY
+        );
         modalSaveBtn.style.display = "none";
         modalSubtitle.textContent =
           "Gerencie valores que sobrepõem os dados do cronograma.";
         document
           .getElementById("add-custom-value-btn")
           ?.addEventListener("click", () => renderCustomValueEditForm());
+
+        const project = await getProjectBase();
+        const mapping = await storage.getData(
+          storage.APP_KEYS.ACTIVITY_MAPPING_KEY
+        );
+
         const allItems = [
-          ...(getLatestProject()?.TASK?.rows || []).map((t) => ({
+          ...(project?.TASK?.rows || []).map((t) => ({
             id: t.task_code,
             name: `${t.task_code} - ${t.task_name}`,
           })),
-          ...storage
-            .getData(storage.APP_KEYS.ACTIVITY_MAPPING_KEY)
-            .map((g) => ({
-              id: `group::${g.groupName}`,
-              name: `[Grupo] ${g.groupName}`,
-            })),
+          ...mapping.map((g) => ({
+            id: `group::${g.groupName}`,
+            name: `[Grupo] ${g.groupName}`,
+          })),
         ];
         const itemsMap = new Map(allItems.map((i) => [i.id, i.name]));
         savedValues.forEach(
@@ -431,9 +486,9 @@
           savedValues.forEach((val) => {
             tableHtml += `<tr><td class="font-semibold">${
               val.name
-            }</td><td class="text-right">${formatNumberBR(
+            }</td><td class="text-right">${utils.formatNumberBR(
               val.planned
-            )}</td><td class="text-right">${formatNumberBR(
+            )}</td><td class="text-right">${utils.formatNumberBR(
               val.actual
             )}</td><td class="text-right"><div class="flex items-center justify-end gap-2"><button class="edit-custom-value-btn text-blue-600 hover:text-blue-800 p-1 rounded-full hover:bg-blue-100" data-id="${
               val.id
@@ -462,8 +517,10 @@
           );
       }
 
-      function renderCustomValueEditForm(id = null) {
-        const savedValues = storage.getData(storage.APP_KEYS.CUSTOM_VALUES_KEY);
+      async function renderCustomValueEditForm(id = null) {
+        const savedValues = await storage.getData(
+          storage.APP_KEYS.CUSTOM_VALUES_KEY
+        );
         const value = id
           ? savedValues.find((v) => v.id === id)
           : { id: null, planned: "", actual: "" };
@@ -482,16 +539,18 @@
         if (id) {
           usedValueIds.delete(id);
         }
-        const allTasks = (getLatestProject()?.TASK?.rows || []).map((t) => ({
+        const project = await getProjectBase();
+        const mapping = await storage.getData(
+          storage.APP_KEYS.ACTIVITY_MAPPING_KEY
+        );
+        const allTasks = (project?.TASK?.rows || []).map((t) => ({
           value: t.task_code,
           text: `${t.task_code} - ${t.task_name}`,
         }));
-        const allGroups = storage
-          .getData(storage.APP_KEYS.ACTIVITY_MAPPING_KEY)
-          .map((g) => ({
-            value: `group::${g.groupName}`,
-            text: `[Grupo] ${g.groupName}`,
-          }));
+        const allGroups = mapping.map((g) => ({
+          value: `group::${g.groupName}`,
+          text: `[Grupo] ${g.groupName}`,
+        }));
         const allOptions = [...allTasks, ...allGroups];
         const availableOptions = allOptions
           .filter((opt) => !usedValueIds.has(opt.value))
@@ -505,9 +564,10 @@
           tomSelect.disable();
         }
         activeTomSelects.push(tomSelect);
+        activateChangeDetection();
       }
 
-      function saveGroup() {
+      async function saveGroup() {
         const groupName = document.getElementById("group-name-input").value;
         const tomSelect = activeTomSelects[0];
         const taskCodes = tomSelect ? tomSelect.getValue() : [];
@@ -519,7 +579,7 @@
           showMessage("Um grupo deve ter pelo menos 2 atividades.", "error");
           return;
         }
-        let savedMapping = storage.getData(
+        let savedMapping = await storage.getData(
           storage.APP_KEYS.ACTIVITY_MAPPING_KEY
         );
         const newGroup = { groupName, taskCodes };
@@ -531,25 +591,31 @@
         } else {
           savedMapping.push(newGroup);
         }
-        storage.saveData(storage.APP_KEYS.ACTIVITY_MAPPING_KEY, savedMapping);
+        await storage.saveData(
+          storage.APP_KEYS.ACTIVITY_MAPPING_KEY,
+          savedMapping
+        );
         showMessage("Grupo salvo com sucesso!", "success");
-        openModal(CONFIG_MODULES["activity-mapping"]);
-        renderActivityMappingTable();
+        setTimeout(closeModal, 1500);
       }
-      function deleteGroup(groupName) {
+
+      async function deleteGroup(groupName) {
         if (confirm(`Tem certeza que deseja excluir o grupo "${groupName}"?`)) {
-          let savedMapping = storage.getData(
+          let savedMapping = await storage.getData(
             storage.APP_KEYS.ACTIVITY_MAPPING_KEY
           );
           const newMapping = savedMapping.filter(
             (g) => g.groupName !== groupName
           );
-          storage.saveData(storage.APP_KEYS.ACTIVITY_MAPPING_KEY, newMapping);
+          await storage.saveData(
+            storage.APP_KEYS.ACTIVITY_MAPPING_KEY,
+            newMapping
+          );
           showMessage("Grupo excluído.", "success");
-          renderActivityMappingTable();
+          await renderActivityMappingTable();
         }
       }
-      function saveCustomValue() {
+      async function saveCustomValue() {
         const tomSelect = document.getElementById(
           "custom-value-select"
         ).tomselect;
@@ -571,7 +637,9 @@
           return;
         }
 
-        let savedValues = storage.getData(storage.APP_KEYS.CUSTOM_VALUES_KEY);
+        let savedValues = await storage.getData(
+          storage.APP_KEYS.CUSTOM_VALUES_KEY
+        );
         const newValue = {
           id: selectedId,
           planned: plannedVal.trim() !== "" ? parseFloat(plannedVal) : null,
@@ -587,24 +655,25 @@
         } else {
           savedValues.push(newValue);
         }
-        storage.saveData(storage.APP_KEYS.CUSTOM_VALUES_KEY, savedValues);
+        await storage.saveData(storage.APP_KEYS.CUSTOM_VALUES_KEY, savedValues);
         showMessage("Valor personalizado salvo!", "success");
-        openModal(CONFIG_MODULES["custom-values"]);
-        renderCustomValuesTable();
+        setTimeout(closeModal, 1500);
       }
-      function deleteCustomValue(id) {
+      async function deleteCustomValue(id) {
         if (
           confirm("Tem certeza que deseja excluir este valor personalizado?")
         ) {
-          let savedValues = storage.getData(storage.APP_KEYS.CUSTOM_VALUES_KEY);
+          let savedValues = await storage.getData(
+            storage.APP_KEYS.CUSTOM_VALUES_KEY
+          );
           const newValues = savedValues.filter((v) => v.id !== id);
-          storage.saveData(storage.APP_KEYS.CUSTOM_VALUES_KEY, newValues);
+          await storage.saveData(storage.APP_KEYS.CUSTOM_VALUES_KEY, newValues);
           showMessage("Valor excluído.", "success");
-          renderCustomValuesTable();
+          await renderCustomValuesTable();
         }
       }
 
-      function processAndSaveWeeksFile(file) {
+      async function processAndSaveWeeksFile(file) {
         if (!file) {
           showMessage("Por favor, selecione um arquivo.", "error");
           return;
@@ -618,7 +687,7 @@
           return;
         }
         const reader = new FileReader();
-        reader.onload = (e) => {
+        reader.onload = async (e) => {
           try {
             const data = new Uint8Array(e.target.result);
             const workbook = XLSX.read(data, { type: "array" });
@@ -665,8 +734,9 @@
               Data_Inicio: w.Data_Inicio.toISOString().split("T")[0],
               Data_Fim: w.Data_Fim.toISOString().split("T")[0],
             }));
-            storage.saveData(storage.APP_KEYS.WEEKS_DATA_KEY, finalData);
+            await storage.saveData(storage.APP_KEYS.WEEKS_DATA_KEY, finalData);
             showMessage("Mapeamento de semanas salvo com sucesso!", "success");
+            setTimeout(closeModal, 1500);
           } catch (err) {
             console.error(err);
             showMessage(`Erro ao processar o arquivo: ${err.message}`, "error");
@@ -682,24 +752,19 @@
             'Carregue um arquivo Excel (.xlsx) com as colunas "Semana" e "Data".',
           setup: () =>
             `<div id="weeks-drop-area" class="mt-4 border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-blue-500 transition-colors"><p class="text-gray-500">Arraste e solte o arquivo .xlsx aqui</p><p class="text-gray-400 my-2">- OU -</p><label for="weeks-file-input" class="cursor-pointer bg-blue-100 text-blue-700 font-semibold px-4 py-2 rounded-md hover:bg-blue-200">Selecionar Arquivo</label><input type="file" id="weeks-file-input" accept=".xlsx" class="hidden"/><p id="weeks-file-name" class="mt-4 text-sm font-medium text-gray-700"></p></div>`,
-          save: () => {
-            const input = document.getElementById("weeks-file-input");
-            if (input.files.length > 0) {
-              processAndSaveWeeksFile(input.files[0]);
-            } else {
-              showMessage("Nenhum arquivo selecionado para salvar.", "error");
-            }
+          save: async () => {
+            // This module's save is handled by the file processor directly.
           },
         },
         resource: {
           title: "Recurso Principal de Avanço",
           subtitle:
             "Selecione o recurso que representa o avanço físico do projeto.",
-          setup: () => {
-            const resources = getLatestProject()?.RSRC?.rows || [];
+          setup: async (project) => {
+            const resources = project?.RSRC?.rows || [];
             if (resources.length === 0)
               return "<p>Nenhum recurso encontrado. Carregue um arquivo .xer primeiro.</p>";
-            const savedResource = storage.getData(
+            const savedResource = await storage.getData(
               storage.APP_KEYS.MAIN_RESOURCE_KEY
             );
             const options = resources
@@ -712,14 +777,15 @@
               .join("");
             return `<select id="modal-resource-select" class="w-full p-2 border border-gray-300 rounded-md">${options}</select>`;
           },
-          save: () => {
+          save: async () => {
             const select = document.getElementById("modal-resource-select");
             if (select && select.value) {
-              storage.saveData(
+              await storage.saveData(
                 storage.APP_KEYS.MAIN_RESOURCE_KEY,
                 select.value
               );
               showMessage("Recurso salvo!", "success");
+              setTimeout(closeModal, 1500);
             } else {
               showMessage("Nenhum recurso selecionado.", "error");
             }
@@ -729,15 +795,15 @@
           title: "Agrupamento da Visão Semanal",
           subtitle:
             'Selecione os níveis da WBS para agrupar as atividades na página "Próximas Semanas".',
-          setup: () => {
-            const wbsHierarchy = getLatestProject()?.WBS_HIERARCHY?.rows || [];
+          setup: async (project) => {
+            const wbsHierarchy = project?.WBS_HIERARCHY?.rows || [];
             if (wbsHierarchy.length === 0)
               return "<p>Nenhuma hierarquia WBS encontrada. Carregue um arquivo .xer primeiro.</p>";
             const maxLevel = Math.max(
               0,
               ...wbsHierarchy.map((w) => parseInt(w.level, 10))
             );
-            const savedLevels = storage.getData(
+            const savedLevels = await storage.getData(
               storage.APP_KEYS.WEEKS_VIEW_GROUPING_KEY
             );
             let checkboxesHtml = '<div class="grid grid-cols-4 gap-2">';
@@ -749,18 +815,19 @@
             checkboxesHtml += "</div>";
             return checkboxesHtml;
           },
-          save: () => {
+          save: async () => {
             const selectedLevels = [];
             document
               .querySelectorAll('input[type="checkbox"]:checked')
               .forEach((cb) => {
                 selectedLevels.push(parseInt(cb.value));
               });
-            storage.saveData(
+            await storage.saveData(
               storage.APP_KEYS.WEEKS_VIEW_GROUPING_KEY,
               selectedLevels.sort((a, b) => a - b)
             );
             showMessage("Agrupamento salvo com sucesso!", "success");
+            setTimeout(closeModal, 1500);
           },
         },
         "hidden-activities": {
@@ -768,16 +835,17 @@
           subtitle:
             "Atividades selecionadas não aparecerão no dashboard de próximas semanas.",
           needsMoreHeight: true,
-          setup: () =>
+          setup: async () =>
             `<select id="hidden-activities-select" multiple placeholder="Busque por código ou nome..."></select>`,
-          save: () => {
+          save: async () => {
             const tomSelect = activeTomSelects[0];
             if (tomSelect) {
-              storage.saveData(
+              await storage.saveData(
                 storage.APP_KEYS.WEEKS_VIEW_HIDDEN_ACTIVITIES_KEY,
                 tomSelect.getValue()
               );
               showMessage("Lista salva!", "success");
+              setTimeout(closeModal, 1500);
             }
           },
         },
@@ -816,47 +884,22 @@
                     </div>
                     <div class="border-t pt-6">
                         <h3 class="font-semibold text-lg text-gray-800 mb-2">Importar Dados</h3>
-                        <p class="text-gray-600 mb-4">Selecione um arquivo de backup (.json) para restaurar os dados. <strong class="text-red-600">Atenção: Isso substituirá todos os dados atuais.</strong></p>
-                         <input type="file" id="import-file-input" accept=".json" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
-                         <p id="import-file-name" class="mt-2 text-sm text-gray-500"></p>
+                        <p class="text-gray-600 mb-4">Arraste um arquivo de backup (.json) ou selecione-o para restaurar os dados. <strong class="text-red-600">Atenção: Isso substituirá todos os dados atuais.</strong></p>
+                        <div id="import-drop-area" class="mt-4 border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-blue-500 transition-colors">
+                            <p class="text-gray-500">Arraste e solte o arquivo .json aqui</p>
+                            <p class="text-gray-400 my-2">- OU -</p>
+                            <label for="import-file-input" class="cursor-pointer bg-blue-100 text-blue-700 font-semibold px-4 py-2 rounded-md hover:bg-blue-200">Selecionar Arquivo de Backup</label>
+                            <input type="file" id="import-file-input" accept=".json" class="hidden"/>
+                            <p id="import-file-name" class="mt-4 text-sm font-medium text-gray-700"></p>
+                        </div>
+                        <button id="start-import-btn" class="mt-4 w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 font-semibold disabled:bg-gray-400 disabled:cursor-not-allowed" disabled>Confirmar e Importar Arquivo</button>
                     </div>
                 </div>`,
-          save: () => {
-            if (fileToImport) {
-              const reader = new FileReader();
-              reader.onload = function (e) {
-                try {
-                  const data = JSON.parse(e.target.result);
-                  const importedKeys = storage.importAllData(data);
-                  if (importedKeys > 0) {
-                    showMessage(
-                      "Dados importados com sucesso! A página será recarregada.",
-                      "success"
-                    );
-                    setTimeout(() => window.location.reload(), 2000);
-                  } else {
-                    throw new Error(
-                      "O arquivo não parece ser um backup válido."
-                    );
-                  }
-                } catch (err) {
-                  showMessage(`Erro ao importar: ${err.message}`, "error");
-                }
-              };
-              reader.readAsText(fileToImport);
-            } else {
-              showMessage(
-                "Por favor, selecione um arquivo para importar.",
-                "error"
-              );
-            }
-          },
         },
       };
 
       // --- Inicialização da Página e Event Listeners ---
-      (() => {
-        getLatestProject();
+      (async () => {
         const cardConfigs = {
           "config-weeks": "weeks",
           "config-resource": "resource",
@@ -869,15 +912,23 @@
         for (const [cardId, moduleName] of Object.entries(cardConfigs)) {
           const cardElement = document.getElementById(cardId);
           if (cardElement) {
-            cardElement.addEventListener("click", () => {
+            cardElement.addEventListener("click", async () => {
               const module = CONFIG_MODULES[moduleName];
-              openModal(module);
+              await openModal(module);
 
               if (moduleName === "weeks") {
                 const dropArea = document.getElementById("weeks-drop-area");
                 const fileInput = document.getElementById("weeks-file-input");
                 const fileNameDisplay =
                   document.getElementById("weeks-file-name");
+
+                const handleFile = (file) => {
+                  if (file) {
+                    fileNameDisplay.textContent = file.name;
+                    processAndSaveWeeksFile(file);
+                  }
+                };
+
                 ["dragenter", "dragover", "dragleave", "drop"].forEach(
                   (eventName) =>
                     dropArea.addEventListener(
@@ -910,26 +961,24 @@
                 );
                 dropArea.addEventListener(
                   "drop",
-                  (e) => {
-                    const files = e.dataTransfer.files;
-                    if (files.length > 0) {
-                      fileInput.files = files;
-                      fileNameDisplay.textContent = files[0].name;
-                      processAndSaveWeeksFile(files[0]);
+                  async (e) => {
+                    if (e.dataTransfer.files.length > 0) {
+                      handleFile(e.dataTransfer.files[0]);
                     }
                   },
                   false
                 );
                 fileInput.addEventListener("change", () => {
                   if (fileInput.files.length > 0) {
-                    fileNameDisplay.textContent = fileInput.files[0].name;
+                    handleFile(fileInput.files[0]);
                   }
                 });
               } else if (moduleName === "hidden-activities") {
                 const selectEl = document.getElementById(
                   "hidden-activities-select"
                 );
-                const allTasks = getLatestProject()?.TASK?.rows || [];
+                const project = await getProjectBase();
+                const allTasks = project?.TASK?.rows || [];
                 const options = allTasks
                   .sort((a, b) => a.task_code.localeCompare(b.task_code))
                   .map((t) => ({
@@ -942,20 +991,22 @@
                     plugins: ["remove_button"],
                   });
                   tomSelect.setValue(
-                    storage.getData(
+                    await storage.getData(
                       storage.APP_KEYS.WEEKS_VIEW_HIDDEN_ACTIVITIES_KEY
                     )
                   );
                   activeTomSelects.push(tomSelect);
+                  activateChangeDetection();
                 }
               } else if (moduleName === "activity-mapping") {
-                renderActivityMappingTable();
+                await renderActivityMappingTable();
               } else if (moduleName === "custom-values") {
-                renderCustomValuesTable();
+                await renderCustomValuesTable();
               } else if (moduleName === "backup") {
-                modalSaveBtn.textContent = "Importar Agora";
-                document.getElementById("export-btn").onclick = () => {
-                  const backupData = storage.exportAllData();
+                document.getElementById("modal-footer").style.display = "none";
+
+                document.getElementById("export-btn").onclick = async () => {
+                  const backupData = await storage.exportAllData();
                   const blob = new Blob([JSON.stringify(backupData, null, 2)], {
                     type: "application/json",
                   });
@@ -971,14 +1022,148 @@
                   URL.revokeObjectURL(url);
                   showMessage("Exportação iniciada.", "success");
                 };
+
                 const importInput =
                   document.getElementById("import-file-input");
+                const importBtn = document.getElementById("start-import-btn");
+                const importDropArea =
+                  document.getElementById("import-drop-area");
+                const importFileNameDisplay =
+                  document.getElementById("import-file-name");
+
+                const handleFileSelection = (selectedFile) => {
+                  if (
+                    selectedFile &&
+                    selectedFile.name.toLowerCase().endsWith(".json")
+                  ) {
+                    fileToImport = selectedFile;
+                    importFileNameDisplay.textContent = `Arquivo: ${fileToImport.name}`;
+                    importBtn.disabled = false;
+                    importDropArea.classList.add(
+                      "border-green-500",
+                      "bg-green-50"
+                    );
+                    importDropArea.classList.remove(
+                      "border-red-500",
+                      "bg-red-50"
+                    );
+                  } else {
+                    fileToImport = null;
+                    importBtn.disabled = true;
+                    importDropArea.classList.remove(
+                      "border-green-500",
+                      "bg-green-50"
+                    );
+                    if (selectedFile) {
+                      importFileNameDisplay.textContent =
+                        "Por favor, use um arquivo .json válido.";
+                      importDropArea.classList.add(
+                        "border-red-500",
+                        "bg-red-50"
+                      );
+                      showMessage(
+                        "Tipo de arquivo inválido. Apenas arquivos .json são permitidos.",
+                        "error"
+                      );
+                    } else {
+                      importFileNameDisplay.textContent = "";
+                    }
+                  }
+                };
+
                 importInput.onchange = () => {
-                  if (importInput.files.length > 0) {
-                    fileToImport = importInput.files[0];
-                    document.getElementById(
-                      "import-file-name"
-                    ).textContent = `Arquivo selecionado: ${fileToImport.name}`;
+                  handleFileSelection(
+                    importInput.files.length > 0 ? importInput.files[0] : null
+                  );
+                };
+
+                ["dragenter", "dragover", "dragleave", "drop"].forEach(
+                  (eventName) => {
+                    importDropArea.addEventListener(
+                      eventName,
+                      (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      },
+                      false
+                    );
+                  }
+                );
+                ["dragenter", "dragover"].forEach((eventName) => {
+                  importDropArea.addEventListener(
+                    eventName,
+                    () => {
+                      if (
+                        !importDropArea.classList.contains("border-green-500")
+                      ) {
+                        importDropArea.classList.add(
+                          "border-blue-500",
+                          "bg-blue-50"
+                        );
+                      }
+                    },
+                    false
+                  );
+                });
+                ["dragleave", "drop"].forEach((eventName) => {
+                  importDropArea.addEventListener(
+                    eventName,
+                    () => {
+                      importDropArea.classList.remove(
+                        "border-blue-500",
+                        "bg-blue-50"
+                      );
+                    },
+                    false
+                  );
+                });
+                importDropArea.addEventListener(
+                  "drop",
+                  (e) => {
+                    if (e.dataTransfer.files.length > 0) {
+                      importInput.files = e.dataTransfer.files; // Ensures consistency
+                      handleFileSelection(e.dataTransfer.files[0]);
+                    }
+                  },
+                  false
+                );
+
+                importBtn.onclick = async () => {
+                  if (
+                    fileToImport &&
+                    confirm(
+                      "Tem certeza que deseja importar este arquivo? Todos os dados atuais (projetos, configurações, etc.) serão substituídos. Esta ação não pode ser desfeita."
+                    )
+                  ) {
+                    const reader = new FileReader();
+                    reader.onload = async function (e) {
+                      try {
+                        const data = JSON.parse(e.target.result);
+                        const importedKeys = await storage.importAllData(data);
+                        if (importedKeys > 0) {
+                          showMessage(
+                            "Dados importados com sucesso! A página será recarregada.",
+                            "success"
+                          );
+                          setTimeout(() => window.location.reload(), 2000);
+                        } else {
+                          throw new Error(
+                            "O arquivo não parece ser um backup válido."
+                          );
+                        }
+                      } catch (err) {
+                        showMessage(
+                          `Erro ao importar: ${err.message}`,
+                          "error"
+                        );
+                      }
+                    };
+                    reader.readAsText(fileToImport);
+                  } else if (!fileToImport) {
+                    showMessage(
+                      "Por favor, selecione um arquivo para importar.",
+                      "error"
+                    );
                   }
                 };
               }

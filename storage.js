@@ -5,15 +5,22 @@
 
 /**
  * Manages all data persistence for the application, providing a centralized
- * and abstract way to interact with the browser's storage.
- * This approach allows for easier future modifications, such as migrating
- * from localStorage to another storage mechanism like IndexedDB, by
- * changing only this file.
+ * and abstract way to interact with Firebase Cloud Firestore.
+ * This module now stores project data in separate collections for static base
+ * data (`project_base`) and weekly progress (`project_versions`) to optimize
+ * performance and scalability.
  */
+import { db, initializationError } from "./firebase-config.js";
+import {
+  doc,
+  getDoc,
+  setDoc,
+  collection,
+  getDocs,
+  writeBatch,
+} from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
 
 const APP_KEYS = {
-  PROJECTS_DATA_KEY: "allProjectsData",
-  TASKRSRC_DATA_KEY: "allTaskRsrcData",
   WEEKS_DATA_KEY: "projectWeeksRangeData",
   MAIN_RESOURCE_KEY: "mainProgressResource",
   WEEKS_VIEW_GROUPING_KEY: "weeksViewGroupingConfig",
@@ -22,15 +29,10 @@ const APP_KEYS = {
   CUSTOM_VALUES_KEY: "customActivityValues",
 };
 
-const ALL_DATA_KEYS = Object.values(APP_KEYS);
+// This list is used to validate keys during import.
+const ALL_CONFIG_KEYS = Object.values(APP_KEYS);
 
-/**
- * Provides default values for each storage key to ensure type safety
- * and prevent errors when data is not yet present in storage.
- */
 const STORAGE_DEFAULTS = {
-  [APP_KEYS.PROJECTS_DATA_KEY]: {},
-  [APP_KEYS.TASKRSRC_DATA_KEY]: [],
   [APP_KEYS.WEEKS_DATA_KEY]: [],
   [APP_KEYS.MAIN_RESOURCE_KEY]: "",
   [APP_KEYS.WEEKS_VIEW_GROUPING_KEY]: [],
@@ -39,84 +41,233 @@ const STORAGE_DEFAULTS = {
   [APP_KEYS.CUSTOM_VALUES_KEY]: [],
 };
 
-/**
- * Retrieves and parses data from localStorage for a given key.
- * If the data doesn't exist or a parsing error occurs, it returns a
- * predefined default value for that key.
- * @param {string} key The key for the data to retrieve (should be one of APP_KEYS).
- * @returns {any} The parsed data or its default value.
- */
-function getData(key) {
-  try {
-    const item = localStorage.getItem(key);
-    // For string values like MAIN_RESOURCE_KEY, we don't parse JSON
-    if (key === APP_KEYS.MAIN_RESOURCE_KEY) {
-      return item === null ? STORAGE_DEFAULTS[key] : item;
-    }
-    return item ? JSON.parse(item) : STORAGE_DEFAULTS[key] || null;
-  } catch (e) {
-    console.error(`Error reading or parsing ${key} from storage:`, e);
-    return STORAGE_DEFAULTS[key] || null;
-  }
-}
+// If Firebase fails to initialize, db will be undefined, and we must handle this gracefully.
+const configCollectionRef = !initializationError
+  ? collection(db, "p6-app-data")
+  : null;
+const baseCollectionRef = !initializationError
+  ? collection(db, "project_base")
+  : null;
+const versionsCollectionRef = !initializationError
+  ? collection(db, "project_versions")
+  : null;
 
 /**
- * Stringifies and saves data to localStorage for a given key.
- * If the value is null or undefined, the key is removed from storage.
- * @param {string} key The key for the data to save (should be one of APP_KEYS).
- * @param {any} value The data to be saved.
+ * Retrieves configuration data for a specific key from the 'p6-app-data' collection.
+ * @param {string} key The key (and document ID) for the config data.
+ * @returns {Promise<any>} The data or a default value if not found.
  */
-function saveData(key, value) {
+async function getData(key) {
+  if (!configCollectionRef) return STORAGE_DEFAULTS[key];
   try {
-    if (value === null || value === undefined) {
-      localStorage.removeItem(key);
+    const docRef = doc(configCollectionRef, key);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      const documentData = docSnap.data();
+      return documentData.data !== undefined
+        ? documentData.data
+        : STORAGE_DEFAULTS[key];
     } else {
-      // For simple strings, no need to stringify
-      const valueToStore =
-        typeof value === "string" ? value : JSON.stringify(value);
-      localStorage.setItem(key, valueToStore);
+      return STORAGE_DEFAULTS[key];
     }
   } catch (e) {
-    console.error(`Error saving ${key} to storage:`, e);
+    console.error(`Error reading config document '${key}' from Firestore:`, e);
+    return STORAGE_DEFAULTS[key];
   }
 }
 
 /**
- * Gathers all application data from localStorage for backup purposes.
- * @returns {Object} An object containing all stored data as raw strings.
+ * Saves a configuration value to a specific key in the 'p6-app-data' collection.
+ * @param {string} key The key (and document ID) for the data.
+ * @param {any} value The data to save.
  */
-function exportAllData() {
-  const backupData = {};
-  ALL_DATA_KEYS.forEach((key) => {
-    const data = localStorage.getItem(key);
-    if (data) {
-      backupData[key] = data;
-    }
-  });
-  return backupData;
+async function saveData(key, value) {
+  if (!configCollectionRef)
+    throw new Error("Firebase not initialized, cannot save data.");
+  try {
+    const docRef = doc(configCollectionRef, key);
+    await setDoc(docRef, { data: value });
+  } catch (e) {
+    console.error(`Error saving config document '${key}' to Firestore:`, e);
+    throw e;
+  }
 }
 
 /**
- * Imports a data backup, restoring all data into localStorage.
- * @param {Object} data The backup data object with raw string values.
- * @returns {number} The number of keys successfully imported.
+ * Retrieves the static base data of the project. Assumes one project per app instance.
+ * @returns {Promise<Object | null>} The project base data object, or null if not found.
  */
-function importAllData(data) {
-  let importedKeys = 0;
-  ALL_DATA_KEYS.forEach((key) => {
-    if (data[key]) {
-      localStorage.setItem(key, data[key]);
-      importedKeys++;
+async function getProjectBase() {
+  if (!baseCollectionRef) return null;
+  try {
+    const docRef = doc(baseCollectionRef, "main_project");
+    const docSnap = await getDoc(docRef);
+    return docSnap.exists() ? docSnap.data() : null;
+  } catch (e) {
+    console.error("Error fetching project base:", e);
+    return null;
+  }
+}
+
+/**
+ * Saves the static base data of the project.
+ * @param {Object} projectData The static project data to save.
+ */
+async function saveProjectBase(projectData) {
+  if (!baseCollectionRef)
+    throw new Error("Firebase not initialized, cannot save project base.");
+  try {
+    const docRef = doc(baseCollectionRef, "main_project");
+    await setDoc(docRef, projectData);
+  } catch (e) {
+    console.error("Error saving project base:", e);
+    throw e;
+  }
+}
+
+/**
+ * Retrieves all project version documents from the 'project_versions' collection.
+ * @returns {Promise<Object>} An object where keys are version IDs and values are version data.
+ */
+async function getProjectVersions() {
+  if (!versionsCollectionRef) return {};
+  const versions = {};
+  try {
+    const querySnapshot = await getDocs(versionsCollectionRef);
+    querySnapshot.forEach((doc) => {
+      versions[doc.id] = doc.data();
+    });
+    return versions;
+  } catch (e) {
+    console.error("Error fetching all project versions:", e);
+    return {};
+  }
+}
+
+/**
+ * Saves a single project version's data to the 'project_versions' collection.
+ * @param {string} versionId The ID of the version (e.g., project ID from XER file).
+ * @param {Object} versionData The version data object to save.
+ */
+async function saveProjectVersion(versionId, versionData) {
+  if (!versionsCollectionRef)
+    throw new Error("Firebase not initialized, cannot save project version.");
+  try {
+    const versionDocRef = doc(versionsCollectionRef, versionId);
+    await setDoc(versionDocRef, versionData);
+  } catch (e) {
+    console.error(`Error saving project version '${versionId}':`, e);
+    throw e;
+  }
+}
+
+/**
+ * Exports all data from all collections into a single structured JS object for backup.
+ * @returns {Promise<Object>} An object containing all stored data.
+ */
+async function exportAllData() {
+  if (!configCollectionRef || !baseCollectionRef || !versionsCollectionRef)
+    return {};
+  const backupData = {
+    config: {},
+    base: {},
+    versions: {},
+  };
+  try {
+    // Export config data
+    const configSnapshot = await getDocs(configCollectionRef);
+    configSnapshot.forEach((doc) => {
+      backupData.config[doc.id] = doc.data().data;
+    });
+
+    // Export base project data
+    const baseDoc = await getDoc(doc(baseCollectionRef, "main_project"));
+    if (baseDoc.exists()) {
+      backupData.base = baseDoc.data();
     }
-  });
-  return importedKeys;
+
+    // Export versions data
+    const versionsSnapshot = await getDocs(versionsCollectionRef);
+    versionsSnapshot.forEach((doc) => {
+      backupData.versions[doc.id] = doc.data();
+    });
+
+    return backupData;
+  } catch (e) {
+    console.error("Error exporting all data from Firestore:", e);
+    return { config: {}, base: {}, versions: {} };
+  }
+}
+
+/**
+ * Imports data from a structured JS object, overwriting existing data.
+ * @param {Object} data The object containing `config`, `base`, and `versions` data.
+ * @returns {Promise<number>} The number of documents successfully written.
+ */
+async function importAllData(data) {
+  if (
+    !configCollectionRef ||
+    !baseCollectionRef ||
+    !versionsCollectionRef ||
+    !data ||
+    typeof data !== "object" ||
+    !data.config ||
+    !data.base ||
+    !data.versions
+  ) {
+    throw new Error("Invalid backup file structure.");
+  }
+
+  const batch = writeBatch(db);
+
+  // Import config data
+  for (const key in data.config) {
+    if (
+      Object.hasOwnProperty.call(data.config, key) &&
+      ALL_CONFIG_KEYS.includes(key)
+    ) {
+      const docRef = doc(configCollectionRef, key);
+      batch.set(docRef, { data: data.config[key] });
+    }
+  }
+
+  // Import base project data
+  if (Object.keys(data.base).length > 0) {
+    const docRef = doc(baseCollectionRef, "main_project");
+    batch.set(docRef, data.base);
+  }
+
+  // Import versions data
+  for (const versionId in data.versions) {
+    if (Object.hasOwnProperty.call(data.versions, versionId)) {
+      const docRef = doc(versionsCollectionRef, versionId);
+      batch.set(docRef, data.versions[versionId]);
+    }
+  }
+
+  try {
+    await batch.commit();
+    // Batch writes don't return a count, so we calculate it.
+    const count =
+      Object.keys(data.config).length +
+      (Object.keys(data.base).length > 0 ? 1 : 0) +
+      Object.keys(data.versions).length;
+    return count;
+  } catch (e) {
+    console.error("Error importing all data to Firestore:", e);
+    throw e;
+  }
 }
 
 // Expose the public API for the storage module
-const storage = {
+export const storage = {
   APP_KEYS,
   getData,
   saveData,
+  getProjectBase,
+  saveProjectBase,
+  getProjectVersions,
+  saveProjectVersion,
   exportAllData,
   importAllData,
 };

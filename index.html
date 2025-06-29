@@ -42,10 +42,26 @@
       </section>
     </div>
 
-    <script src="storage.js"></script>
-    <script src="utils.js"></script>
-    <script>
-      insertHeader();
+    <!-- App Scripts as a module -->
+    <script type="module">
+      import {
+        initializationError,
+        showFirebaseError,
+      } from "./firebase-config.js";
+      import * as utils from "./utils.js";
+
+      // First, check if Firebase is configured. If not, show an error and stop.
+      if (initializationError) {
+        utils.insertHeader(); // Show nav so user isn't stuck
+        showFirebaseError();
+        throw initializationError; // Halt script execution
+      }
+
+      // If no error, import other modules and run the app
+      import { storage } from "./storage.js";
+
+      // ===== Page Script Starts Here =====
+      utils.insertHeader();
 
       const dropArea = document.getElementById("drop-area");
       const fileElem = document.getElementById("fileElem");
@@ -53,16 +69,17 @@
       const fileNameSpan = document.getElementById("file-name");
       const dashboardOutput = document.getElementById("dashboard-output");
 
-      const OVERWRITE_TABLE_NAMES = [
-        "PROJECT",
+      // Tables that define the project structure and are saved only once.
+      const BASE_TABLE_NAMES = [
         "RSRC",
         "TASK",
-        "TASKPRED",
         "ACTVCODE",
         "TASKACTV",
         "PROJWBS",
         "WBS_HIERARCHY",
       ];
+      // Tables that change weekly and are saved with every upload.
+      const VERSION_TABLE_NAMES = ["PROJECT", "TASKPRED", "TASKRSRC"];
 
       const COLUMNS_TO_SAVE_MAP = {
         PROJECT: [
@@ -107,7 +124,6 @@
         WBS_HIERARCHY: [
           "stable_wbs_id",
           "wbs_name",
-          "wbs_group_id",
           "level",
           "parent_stable_wbs_id",
         ],
@@ -166,46 +182,37 @@
               currentProjectId
             );
 
-            let allProjectsData = storage.getData(
-              storage.APP_KEYS.PROJECTS_DATA_KEY
-            );
-            let allTaskRsrcData = storage.getData(
-              storage.APP_KEYS.TASKRSRC_DATA_KEY
-            );
+            // Check if the base project data already exists.
+            const projectBase = await storage.getProjectBase();
+            const isFirstUpload =
+              !projectBase || Object.keys(projectBase).length === 0;
 
-            const currentProjectVersionTables = {};
-            OVERWRITE_TABLE_NAMES.forEach((tableName) => {
+            if (isFirstUpload) {
+              const baseData = {};
+              BASE_TABLE_NAMES.forEach((tableName) => {
+                if (transformedTables[tableName]) {
+                  baseData[tableName] = filterTableColumns(
+                    transformedTables[tableName],
+                    COLUMNS_TO_SAVE_MAP[tableName]
+                  );
+                }
+              });
+              await storage.saveProjectBase(baseData);
+            }
+
+            // Always save the weekly version data.
+            const versionData = {};
+            VERSION_TABLE_NAMES.forEach((tableName) => {
               if (transformedTables[tableName]) {
-                currentProjectVersionTables[tableName] = filterTableColumns(
+                versionData[tableName] = filterTableColumns(
                   transformedTables[tableName],
                   COLUMNS_TO_SAVE_MAP[tableName]
                 );
               }
             });
+            await storage.saveProjectVersion(currentProjectId, versionData);
 
-            allProjectsData[currentProjectId] = currentProjectVersionTables;
-
-            if (transformedTables["TASKRSRC"]?.rows.length > 0) {
-              allTaskRsrcData = allTaskRsrcData.filter(
-                (item) => item.proj_id !== currentProjectId
-              );
-              const filteredTaskRsrcRows = filterRowsByColumns(
-                transformedTables["TASKRSRC"].rows,
-                COLUMNS_TO_SAVE_MAP["TASKRSRC"]
-              );
-              allTaskRsrcData.push(...filteredTaskRsrcRows);
-            }
-
-            storage.saveData(
-              storage.APP_KEYS.PROJECTS_DATA_KEY,
-              allProjectsData
-            );
-            storage.saveData(
-              storage.APP_KEYS.TASKRSRC_DATA_KEY,
-              allTaskRsrcData
-            );
-
-            loadDashboard();
+            await loadDashboard();
           } catch (error) {
             console.error("Erro ao processar ou salvar o arquivo:", error);
             dashboardOutput.innerHTML = `<p class="message-box error">Erro ao processar o arquivo: ${error.message}.</p>`;
@@ -428,34 +435,36 @@
         return { headers: newHeaders, rows: newRows };
       }
 
-      function filterRowsByColumns(rows, columnsToKeep) {
-        if (!rows || !columnsToKeep) return [];
-        return rows.map((row) => {
-          const newRow = {};
-          columnsToKeep.forEach((header) => {
-            if (row.hasOwnProperty(header)) {
-              newRow[header] = row[header];
-            }
-          });
-          return newRow;
-        });
-      }
-
-      function displayDashboard(allProjectsData, weeksMapping) {
-        let projectsListHtml = Object.keys(allProjectsData)
-          .map((projId) => {
-            const projectInfo = allProjectsData[projId]?.PROJECT?.rows[0];
-            if (!projectInfo) return "";
-            const recalcDate = projectInfo.last_recalc_date;
-            const weekNumber = getWeekForDate(recalcDate, weeksMapping);
+      function displayDashboard(projectVersions, weeksMapping) {
+        let versionsListHtml = Object.keys(projectVersions)
+          .sort((a, b) => {
+            const dateA = new Date(
+              projectVersions[a].PROJECT?.rows[0]?.last_recalc_date.replace(
+                " ",
+                "T"
+              ) || 0
+            );
+            const dateB = new Date(
+              projectVersions[b].PROJECT?.rows[0]?.last_recalc_date.replace(
+                " ",
+                "T"
+              ) || 0
+            );
+            return dateB - dateA;
+          })
+          .map((versionId) => {
+            const versionInfo = projectVersions[versionId]?.PROJECT?.rows[0];
+            if (!versionInfo) return "";
+            const recalcDate = versionInfo.last_recalc_date;
+            const weekNumber = utils.getWeekForDate(recalcDate, weeksMapping);
             const weekText = weekNumber
               ? `Semana ${weekNumber}`
               : "Semana não mapeada";
 
             return `
             <div class="project-list-item">
-              <div class="font-medium text-gray-800">${weekText} <span class="text-xs text-gray-500 font-mono ml-2">(${projId})</span></div>
-              <div class="text-gray-600">Atualizado em: ${formatBrazilianDate(
+              <div class="font-medium text-gray-800">${weekText} <span class="text-xs text-gray-500 font-mono ml-2">(${versionId})</span></div>
+              <div class="text-gray-600">Atualizado em: ${utils.formatBrazilianDate(
                 recalcDate
               )}</div>
             </div>`;
@@ -464,31 +473,43 @@
 
         dashboardOutput.innerHTML = `
             <div>
-              <h2 class="text-2xl font-bold text-gray-800 mb-4">Projetos Carregados</h2>
-              <div class="space-y-2">${projectsListHtml}</div>
+              <h2 class="text-2xl font-bold text-gray-800 mb-4">Versões Carregadas</h2>
+              <div class="space-y-2">${versionsListHtml}</div>
             </div>
         `;
       }
 
-      function loadDashboard() {
+      async function loadDashboard() {
         try {
-          const allProjectsData = storage.getData(
-            storage.APP_KEYS.PROJECTS_DATA_KEY
+          // Use the new architecture: fetch base project and all versions
+          const projectBase = await storage.getProjectBase();
+          const projectVersions = await storage.getProjectVersions();
+          const weeksMapping = await storage.getData(
+            storage.APP_KEYS.WEEKS_DATA_KEY
           );
-          const weeksMapping = storage.getData(storage.APP_KEYS.WEEKS_DATA_KEY);
 
-          const projectIds = Object.keys(allProjectsData);
-          if (projectIds.length > 0) {
-            displayDashboard(allProjectsData, weeksMapping);
+          const versionIds = Object.keys(projectVersions);
+
+          if (!projectBase || Object.keys(projectBase).length === 0) {
+            dashboardOutput.innerHTML = `
+              <div>
+                <p class="message-box info">Nenhuma informação de projeto carregada. Por favor, envie um arquivo .xer para iniciar.</p>
+              </div>
+            `;
+            return;
+          }
+
+          if (versionIds.length > 0) {
+            displayDashboard(projectVersions, weeksMapping);
             fileDisplay.classList.remove("hidden");
             if (!fileNameSpan.textContent) {
               fileNameSpan.textContent =
-                "Dados carregados do armazenamento local.";
+                "Dados carregados do armazenamento em nuvem.";
             }
           } else {
             dashboardOutput.innerHTML = `
               <div>
-                <p class="message-box info">Nenhuma informação de projeto carregada. Por favor, envie um arquivo .xer.</p>
+                <p class="message-box info">Dados base do projeto encontrados, mas nenhuma versão semanal foi carregada. Envie um arquivo .xer.</p>
               </div>
             `;
           }
@@ -498,7 +519,9 @@
         }
       }
 
-      loadDashboard();
+      (async () => {
+        await loadDashboard();
+      })();
     </script>
   </body>
 </html>

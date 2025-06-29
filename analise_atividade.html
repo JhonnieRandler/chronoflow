@@ -25,7 +25,7 @@
             <label
               for="task-select"
               class="block font-medium text-gray-700 mb-1"
-              >Selecione a Atividade ou Grupo:</label
+              >Selecione la Atividade ou Grupo:</label
             >
             <select
               id="task-select"
@@ -40,24 +40,42 @@
         </div>
       </div>
     </div>
-    <script src="storage.js"></script>
-    <script src="utils.js"></script>
-    <script>
-      insertHeader();
+
+    <!-- App Scripts as a module -->
+    <script type="module">
+      import {
+        initializationError,
+        showFirebaseError,
+      } from "./firebase-config.js";
+      import * as utils from "./utils.js";
+
+      // First, check if Firebase is configured. If not, show an error and stop.
+      if (initializationError) {
+        utils.insertHeader(); // Show nav so user isn't stuck
+        showFirebaseError();
+        throw initializationError; // Halt script execution
+      }
+
+      // If no error, import other modules and run the app
+      import { storage } from "./storage.js";
+
+      // ===== Page Script Starts Here =====
+      utils.insertHeader();
 
       const taskSelectEl = document.getElementById("task-select");
       const analysisOutput = document.getElementById("analysis-output");
       const projectInfo = document.getElementById("project-info");
 
-      let allProjectsData,
+      let projectBase = null,
+        projectVersions = {},
         mainResource,
         tomSelectInstance,
         activityMapping,
-        allTaskRsrcData,
+        allTaskRsrcData = [],
         weeksData,
         wbsMap,
         chartInstance,
-        latestProjectId,
+        latestVersionId,
         customValuesData;
 
       const STATUS_MAP = {
@@ -93,57 +111,78 @@
       };
 
       // --- Carregamento Inicial ---
-      (() => {
+      (async () => {
         try {
-          allProjectsData = storage.getData(storage.APP_KEYS.PROJECTS_DATA_KEY);
-          mainResource = storage.getData(storage.APP_KEYS.MAIN_RESOURCE_KEY);
-          activityMapping = storage.getData(
+          projectBase = await storage.getProjectBase();
+          projectVersions = await storage.getProjectVersions();
+
+          if (!projectBase || Object.keys(projectBase).length === 0) {
+            projectInfo.textContent =
+              "Nenhum projeto base encontrado. Faça o upload de um arquivo .xer.";
+            return;
+          }
+          if (Object.keys(projectVersions).length === 0) {
+            projectInfo.textContent =
+              "Nenhuma versão de projeto encontrada. Faça o upload de um arquivo .xer.";
+            return;
+          }
+
+          mainResource = await storage.getData(
+            storage.APP_KEYS.MAIN_RESOURCE_KEY
+          );
+          activityMapping = await storage.getData(
             storage.APP_KEYS.ACTIVITY_MAPPING_KEY
           );
-          allTaskRsrcData = storage.getData(storage.APP_KEYS.TASKRSRC_DATA_KEY);
-          weeksData = storage.getData(storage.APP_KEYS.WEEKS_DATA_KEY);
+          weeksData = await storage.getData(storage.APP_KEYS.WEEKS_DATA_KEY);
+          const customValuesRaw = await storage.getData(
+            storage.APP_KEYS.CUSTOM_VALUES_KEY
+          );
           customValuesData = new Map(
-            storage
-              .getData(storage.APP_KEYS.CUSTOM_VALUES_KEY)
-              .map((item) => [item.id, item])
+            customValuesRaw.map((item) => [item.id, item])
           );
 
-          if (Object.keys(allProjectsData).length === 0) {
-            projectInfo.textContent = "Nenhum projeto encontrado.";
-            return;
-          }
+          // Reconstruct allTaskRsrcData from all versions
+          allTaskRsrcData = Object.values(projectVersions).flatMap(
+            (version) => version.TASKRSRC?.rows || []
+          );
 
-          latestProjectId = getLatestProjectId(allProjectsData);
-          if (!latestProjectId) {
+          latestVersionId = utils.getLatestProjectId(projectVersions);
+          if (!latestVersionId) {
             projectInfo.textContent =
-              "Não foi possível encontrar o projeto mais recente.";
+              "Não foi possível encontrar a versão mais recente do projeto.";
             return;
           }
 
-          const lp = allProjectsData[latestProjectId];
+          const latestVersion = projectVersions[latestVersionId];
           wbsMap = new Map(
-            (lp.WBS_HIERARCHY?.rows || []).map((w) => [w.stable_wbs_id, w])
+            (projectBase.WBS_HIERARCHY?.rows || []).map((w) => [
+              w.stable_wbs_id,
+              w,
+            ])
           );
 
-          const lastRecalcDate = lp.PROJECT?.rows[0]?.last_recalc_date;
-          const recalcWeek = getWeekForDate(lastRecalcDate, weeksData);
+          const lastRecalcDate =
+            latestVersion.PROJECT?.rows[0]?.last_recalc_date;
+          const recalcWeek = utils.getWeekForDate(lastRecalcDate, weeksData);
 
           projectInfo.innerHTML = recalcWeek
-            ? `Analisando o projeto na <strong>semana ${recalcWeek}</strong> (com base no último .xer).`
-            : `Analisando o projeto <strong>${
-                lp?.PROJECT?.rows[0]?.proj_name || latestProjectId
-              }</strong>.`;
+            ? `Analisando o projeto na <strong>semana ${recalcWeek}</strong> (versão de ${utils.formatBrazilianDate(
+                lastRecalcDate
+              )}).`
+            : `Analisando o projeto (versão de ${utils.formatBrazilianDate(
+                lastRecalcDate
+              )}).`;
 
-          populateTaskSelect(latestProjectId);
+          populateTaskSelect();
         } catch (e) {
           console.error(e);
-          analysisOutput.innerHTML = `<div class="message-box" style="color: #ef4444;">Erro ao carregar dados.</div>`;
+          analysisOutput.innerHTML = `<div class="message-box" style="color: #ef4444;">Erro ao carregar dados: ${e.message}</div>`;
         }
       })();
 
-      function populateTaskSelect(pid) {
+      function populateTaskSelect() {
         if (tomSelectInstance) tomSelectInstance.destroy();
-        const tasks = allProjectsData[pid]?.TASK?.rows || [];
+        const tasks = projectBase?.TASK?.rows || [];
         const taskOptions = tasks.map((t) => ({
           value: t.task_code,
           text: `${t.task_code} - ${t.task_name}`,
@@ -201,25 +240,25 @@
                 <div class="info-grid">
                     <div class="info-item genuine-item">
                         <span class="info-item-label">Previsto Topográfico</span>
-                        <span class="info-item-value">${formatNumberBR(
+                        <span class="info-item-value">${utils.formatNumberBR(
                           planned
                         )}</span>
                     </div>
                     <div class="info-item genuine-item">
                         <span class="info-item-label">Realizado Topográfico</span>
-                        <span class="info-item-value">${formatNumberBR(
+                        <span class="info-item-value">${utils.formatNumberBR(
                           actual
                         )}</span>
                     </div>
                     <div class="info-item genuine-item">
                         <span class="info-item-label">Saldo Topográfico</span>
-                        <span class="info-item-value">${formatNumberBR(
+                        <span class="info-item-value">${utils.formatNumberBR(
                           remaining
                         )}</span>
                     </div>
                      <div class="info-item genuine-item">
                         <span class="info-item-label">% Avanço Topográfico</span>
-                        <span class="info-item-value">${formatNumberBR(
+                        <span class="info-item-value">${utils.formatNumberBR(
                           progress
                         )}%</span>
                     </div>
@@ -232,7 +271,7 @@
         if (!stableIdRef || !wbsMap || wbsMap.size === 0)
           return `<div class="wbs-breadcrumb mb-4">Caminho WBS não disponível.</div>`;
 
-        const pathObjects = getWbsPathObjects(stableIdRef, wbsMap);
+        const pathObjects = utils.getWbsPathObjects(stableIdRef, wbsMap);
         const pathHtml = pathObjects.map(
           (wbs) => `<span class="breadcrumb-item">${wbs.wbs_name}</span>`
         );
@@ -245,8 +284,8 @@
       }
 
       function displayActivityAnalysis(taskCode) {
-        const latestProject = getLatestProject();
-        const task = latestProject.TASK.rows.find(
+        const latestVersion = projectVersions[latestVersionId];
+        const task = projectBase.TASK.rows.find(
           (t) => t.task_code === taskCode
         );
         if (!task) {
@@ -263,11 +302,11 @@
         };
 
         const preds =
-          latestProject.TASKPRED?.rows.filter(
+          latestVersion.TASKPRED?.rows.filter(
             (p) => p.task_id_code === taskCode
           ) || [];
         const succs =
-          latestProject.TASKPRED?.rows.filter(
+          latestVersion.TASKPRED?.rows.filter(
             (p) => p.pred_task_id_code === taskCode
           ) || [];
 
@@ -294,11 +333,13 @@
           (r) => r.task_id_code === taskCode
         );
         const byWeek = weeklyRecords.reduce((acc, rec) => {
-          const recalc =
-            allProjectsData[rec.proj_id]?.PROJECT?.rows[0]?.last_recalc_date;
+          const versionData = projectVersions[rec.proj_id];
+          if (!versionData) return acc;
+          const recalc = versionData.PROJECT?.rows[0]?.last_recalc_date;
+
           if (!recalc) return acc;
           const weekLabel =
-            getWeekForDate(recalc, weeksData) || recalc.split(" ")[0];
+            utils.getWeekForDate(recalc, weeksData) || recalc.split(" ")[0];
           if (!acc[weekLabel]) acc[weekLabel] = { resources: [] };
           acc[weekLabel].resources.push(rec);
           return acc;
@@ -328,11 +369,11 @@
                           : ""
                       }<td>${res.rsrc_id_name}${
                         isMain ? " ⭐" : ""
-                      }</td><td class="text-right">${formatNumberBR(
+                      }</td><td class="text-right">${utils.formatNumberBR(
                         target
-                      )}</td><td class="text-right">${formatNumberBR(
+                      )}</td><td class="text-right">${utils.formatNumberBR(
                         actual
-                      )}</td><td class="text-right">${formatNumberBR(
+                      )}</td><td class="text-right">${utils.formatNumberBR(
                         res.remain_qty
                       )}</td><td class="text-right font-medium">${progress}</td></tr>`;
                     })
@@ -349,23 +390,23 @@
         }</span></div>
             ${buildWbsPathHtml(task.wbs_stable_id_ref)}
             <div class="info-grid">
-                <div class="info-item"><span class="info-item-label">Início Planejado</span><span class="info-item-value">${formatBrazilianDate(
+                <div class="info-item"><span class="info-item-label">Início Planejado</span><span class="info-item-value">${utils.formatBrazilianDate(
                   task.target_start_date
                 )}</span></div>
-                <div class="info-item"><span class="info-item-label">Término Planejado</span><span class="info-item-value">${formatBrazilianDate(
+                <div class="info-item"><span class="info-item-label">Término Planejado</span><span class="info-item-value">${utils.formatBrazilianDate(
                   task.target_end_date
                 )}</span></div>
                 <div class="info-item"><span class="info-item-label">${
                   task.act_start_date ? "Início Real" : "Início (Tendência)"
-                }</span><span class="info-item-value">${formatBrazilianDate(
+                }</span><span class="info-item-value">${utils.formatBrazilianDate(
           task.act_start_date || task.restart_date
         )}</span></div>
                 <div class="info-item"><span class="info-item-label">${
                   task.act_end_date ? "Término Real" : "Término (Tendência)"
-                }</span><span class="info-item-value">${formatBrazilianDate(
+                }</span><span class="info-item-value">${utils.formatBrazilianDate(
           task.act_end_date || task.reend_date
         )}</span></div>
-                <div class="info-item"><span class="info-item-label">% Progresso (Cronograma)</span><span class="info-item-value">${formatNumberBR(
+                <div class="info-item"><span class="info-item-label">% Progresso (Cronograma)</span><span class="info-item-value">${utils.formatNumberBR(
                   realProgress
                 )}%</span></div>
             </div>
@@ -460,8 +501,8 @@
         const group = activityMapping.find((g) => g.groupName === groupName);
         if (!group) return;
 
-        const latestProject = getLatestProject();
-        const tasksInGroup = latestProject.TASK.rows.filter((t) =>
+        const latestVersion = projectVersions[latestVersionId];
+        const tasksInGroup = projectBase.TASK.rows.filter((t) =>
           group.taskCodes.includes(t.task_code)
         );
         if (tasksInGroup.length === 0) {
@@ -469,11 +510,10 @@
           return;
         }
 
-        const resourcesInGroup = allTaskRsrcData.filter(
-          (r) =>
-            r.proj_id === latestProjectId &&
-            group.taskCodes.includes(r.task_id_code)
+        const resourcesInGroup = latestVersion.TASKRSRC.rows.filter((r) =>
+          group.taskCodes.includes(r.task_id_code)
         );
+
         const aggregatedResources = resourcesInGroup.reduce((acc, r) => {
           const name = r.rsrc_id_name;
           if (!acc[name]) acc[name] = { planned: 0, actual: 0, remaining: 0 };
@@ -523,13 +563,13 @@
               isMain ? "main-resource-row" : ""
             }"><td>${rsrcName}${
               isMain ? " ⭐" : ""
-            }</td><td class="text-right">${formatNumberBR(
+            }</td><td class="text-right">${utils.formatNumberBR(
               r.planned
-            )}</td><td class="text-right">${formatNumberBR(
+            )}</td><td class="text-right">${utils.formatNumberBR(
               r.actual
-            )}</td><td class="text-right">${formatNumberBR(
+            )}</td><td class="text-right">${utils.formatNumberBR(
               r.remaining
-            )}</td><td class="text-right font-medium">${formatNumberBR(
+            )}</td><td class="text-right font-medium">${utils.formatNumberBR(
               progress
             )}%</td></tr>`;
           })
@@ -539,22 +579,22 @@
         <div class="card">
             <div class="flex justify-between items-start mb-4"><h2 class="text-2xl font-bold text-gray-800">${groupName}</h2><span class="badge status-group">Grupo de Atividades</span></div>
             <div class="info-grid">
-                 <div class="info-item"><span class="info-item-label">Início Planejado (Agregado)</span><span class="info-item-value">${formatBrazilianDate(
+                 <div class="info-item"><span class="info-item-label">Início Planejado (Agregado)</span><span class="info-item-value">${utils.formatBrazilianDate(
                    aggregatedDates.target_start_date
                  )}</span></div>
-                 <div class="info-item"><span class="info-item-label">Término Planejado (Agregado)</span><span class="info-item-value">${formatBrazilianDate(
+                 <div class="info-item"><span class="info-item-label">Término Planejado (Agregado)</span><span class="info-item-value">${utils.formatBrazilianDate(
                    aggregatedDates.target_end_date
                  )}</span></div>
-                 <div class="info-item"><span class="info-item-label">Início Real (Mais Cedo)</span><span class="info-item-value">${formatBrazilianDate(
+                 <div class="info-item"><span class="info-item-label">Início Real (Mais Cedo)</span><span class="info-item-value">${utils.formatBrazilianDate(
                    aggregatedDates.act_start_date
                  )}</span></div>
-                 <div class="info-item"><span class="info-item-label">${aggregatedEndDateLabel}</span><span class="info-item-value">${formatBrazilianDate(
+                 <div class="info-item"><span class="info-item-label">${aggregatedEndDateLabel}</span><span class="info-item-value">${utils.formatBrazilianDate(
           aggregatedDates.aggr_end_date
         )}</span></div>
             </div>
         </div>
         <div class="card">
-            <h3 class="text-xl font-bold text-gray-800 mb-4">Quantidades Consolidadas por Recurso (Cronograma)</h3>
+            <h3 class="text-xl font-bold text-gray-800 mb-4">Quantidades Consolidadas por Recurso (Cronograma da Semana)</h3>
              <div class="table-container"><table><thead><tr><th>Recurso</th><th class="text-right">Total Planejado</th><th class="text-right">Total Realizado</th><th class="text-right">Total Restante</th><th class="text-right">% Progresso</th></tr></thead><tbody>${resourcesHtml}</tbody></table></div>
         </div>
         ${renderGenuineValuesCard(groupId)}
@@ -580,11 +620,11 @@
                         statusInfo.class
                       }">${
                         statusInfo.text
-                      }</span></td><td class="text-right">${formatNumberBR(
+                      }</span></td><td class="text-right">${utils.formatNumberBR(
                         plannedQty
-                      )}</td><td>${formatBrazilianDate(
+                      )}</td><td>${utils.formatBrazilianDate(
                         t.act_start_date || t.restart_date
-                      )}</td><td>${formatBrazilianDate(
+                      )}</td><td>${utils.formatBrazilianDate(
                         t.act_end_date || t.reend_date
                       )}</td></tr>`;
                     })
@@ -592,12 +632,6 @@
             </tbody></table></div>
         </div>`;
         analysisOutput.innerHTML = html;
-      }
-
-      function getLatestProject() {
-        if (!allProjectsData || Object.keys(allProjectsData).length === 0)
-          return null;
-        return allProjectsData[latestProjectId];
       }
     </script>
   </body>

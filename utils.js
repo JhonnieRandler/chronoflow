@@ -6,7 +6,7 @@
 /**
  * Inserts a vertical, collapsible sidebar navigation.
  */
-function insertHeader() {
+export function insertHeader() {
   const navLinks = [
     {
       href: "index.html",
@@ -31,7 +31,7 @@ function insertHeader() {
     {
       href: "configuracao.html",
       text: "Configurações",
-      icon: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>',
+      icon: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924-1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>',
     },
   ];
 
@@ -101,7 +101,7 @@ function insertHeader() {
  * @param {string} d A string da data.
  * @returns {string} A data formatada ou 'N/A'.
  */
-function formatBrazilianDate(d) {
+export function formatBrazilianDate(d) {
   if (!d) return "N/A";
   const datePart = d.split(" ")[0];
   const [y, m, day] = datePart.split("-");
@@ -113,7 +113,7 @@ function formatBrazilianDate(d) {
  * @param {number | string} num O número a ser formatado.
  * @returns {string} O número formatado ou '-'.
  */
-function formatNumberBR(num) {
+export function formatNumberBR(num) {
   if (num === null || num === undefined) return "-";
   const number = typeof num !== "number" ? parseFloat(num) : num;
   if (isNaN(number)) return "-";
@@ -129,7 +129,7 @@ function formatNumberBR(num) {
  * @param {Array<Object>} weeksMapping O array de objetos de mapeamento de semanas.
  * @returns {number | null} O número da semana ou null.
  */
-function getWeekForDate(d, weeksMapping) {
+export function getWeekForDate(d, weeksMapping) {
   if (!d || !weeksMapping || weeksMapping.length === 0) return null;
   const checkDate = typeof d === "string" ? new Date(d.replace(" ", "T")) : d;
   checkDate.setHours(0, 0, 0, 0);
@@ -142,19 +142,19 @@ function getWeekForDate(d, weeksMapping) {
 }
 
 /**
- * Encontra o ID do projeto com a data de 'last_recalc_date' mais recente.
- * @param {Object} allProjectsData O objeto contendo todos os dados dos projetos.
- * @returns {string | null} O ID do projeto mais recente ou null.
+ * Encontra o ID da versão do projeto com a data de 'last_recalc_date' mais recente.
+ * @param {Object} projectVersions O objeto contendo todas as versões dos projetos.
+ * @returns {string | null} O ID da versão mais recente ou null.
  */
-function getLatestProjectId(allProjectsData) {
-  if (!allProjectsData || Object.keys(allProjectsData).length === 0) {
+export function getLatestProjectId(projectVersions) {
+  if (!projectVersions || Object.keys(projectVersions).length === 0) {
     return null;
   }
-  return Object.keys(allProjectsData).reduce((latest, current) => {
+  return Object.keys(projectVersions).reduce((latest, current) => {
     const latestDateStr =
-      allProjectsData[latest]?.PROJECT?.rows[0]?.last_recalc_date;
+      projectVersions[latest]?.PROJECT?.rows[0]?.last_recalc_date;
     const currentDateStr =
-      allProjectsData[current]?.PROJECT?.rows[0]?.last_recalc_date;
+      projectVersions[current]?.PROJECT?.rows[0]?.last_recalc_date;
     if (!currentDateStr) return latest;
     if (!latestDateStr) return current;
     const latestDate = new Date(latestDateStr.replace(" ", "T"));
@@ -169,7 +169,7 @@ function getLatestProjectId(allProjectsData) {
  * @param {Map<string, Object>} wbsMap O mapa de todos os itens WBS.
  * @returns {Array<Object>} Um array de objetos WBS representando o caminho.
  */
-function getWbsPathObjects(stableIdRef, wbsMap) {
+export function getWbsPathObjects(stableIdRef, wbsMap) {
   let path = [];
   let currentId = stableIdRef;
   while (currentId && wbsMap.has(currentId)) {
