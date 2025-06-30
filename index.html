@@ -11,13 +11,22 @@
   </head>
   <body>
     <div class="container" id="index-container">
-      <h1 class="text-4xl font-bold text-primary mb-6">Painel de Controle</h1>
-      <p class="text-secondary mb-8">
+      <h1 id="main-title" class="text-4xl font-bold text-primary mb-6">
+        Painel de Controle
+      </h1>
+      <p id="main-subtitle" class="text-secondary mb-8">
         Envie seu arquivo .xer do Primavera P6 para carregar ou atualizar as
         informações do projeto.
       </p>
 
-      <div id="drop-area" class="drop-area">
+      <div
+        id="drop-area"
+        class="drop-area"
+        tabindex="0"
+        role="region"
+        aria-labelledby="main-title"
+        aria-describedby="main-subtitle"
+      >
         <p class="text-xl text-tertiary mb-4">
           Arraste e solte o arquivo .xer aqui
         </p>
@@ -25,13 +34,20 @@
         <label for="fileElem" class="file-input-label"
           >Selecionar Arquivo</label
         >
-        <input type="file" id="fileElem" accept=".xer" />
+        <input type="file" id="fileElem" accept=".xer" class="sr-only" />
       </div>
 
       <div id="file-display" class="file-info hidden">
         Último arquivo processado:
         <span id="file-name" class="font-semibold text-primary"></span>
       </div>
+
+      <div
+        id="file-feedback"
+        class="sr-only"
+        aria-live="polite"
+        aria-atomic="true"
+      ></div>
 
       <section id="dashboard-section" class="dashboard-section">
         <div id="dashboard-output">

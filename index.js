@@ -18,6 +18,7 @@ const dropArea = document.getElementById("drop-area");
 const fileElem = document.getElementById("fileElem");
 const fileDisplay = document.getElementById("file-display");
 const fileNameSpan = document.getElementById("file-name");
+const fileFeedback = document.getElementById("file-feedback");
 const dashboardOutput = document.getElementById("dashboard-output");
 const dashboardSection = document.getElementById("dashboard-section");
 
@@ -93,6 +94,14 @@ function highlight() {
 function unhighlight() {
   dropArea.classList.remove("highlight");
 }
+
+dropArea.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" || e.key === " ") {
+    e.preventDefault();
+    fileElem.click();
+  }
+});
+
 dropArea.addEventListener("drop", handleDrop, false);
 function handleDrop(e) {
   handleFiles(e.dataTransfer.files);
@@ -106,11 +115,15 @@ async function handleFiles(files) {
   const file = files[0];
   if (!file.name.toLowerCase().endsWith(".xer")) {
     dashboardOutput.innerHTML = `<p class="message-box error">Por favor, selecione um arquivo com a extensão .xer.</p>`;
+    fileFeedback.textContent =
+      "Erro: Por favor, selecione um arquivo com a extensão .xer.";
     return;
   }
   fileNameSpan.textContent = file.name;
   fileDisplay.classList.remove("hidden");
+  fileFeedback.textContent = `Arquivo ${file.name} selecionado.`;
   dashboardOutput.innerHTML = `<p class="message-box info" role="status">Processando e salvando arquivo... Isso pode levar alguns instantes.</p>`;
+  fileFeedback.textContent = `Processando arquivo ${file.name}.`;
 
   const reader = new FileReader();
   reader.onload = async function (e) {
@@ -151,10 +164,12 @@ async function handleFiles(files) {
       });
       await storage.saveProjectVersion(currentProjectId, versionData);
       utils.showToast("Arquivo .xer processado e salvo!", "success");
+      fileFeedback.textContent = `Arquivo ${file.name} processado e salvo com sucesso.`;
       await loadDashboard();
     } catch (error) {
       console.error("Erro ao processar ou salvar o arquivo:", error);
       utils.showToast(`Erro ao processar: ${error.message}`, "error");
+      fileFeedback.textContent = `Erro ao processar o arquivo: ${error.message}`;
       dashboardOutput.innerHTML = `<p class="message-box error" role="alert">Erro ao processar o arquivo: ${error.message}.</p>`;
     }
   };

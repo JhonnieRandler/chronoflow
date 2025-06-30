@@ -215,7 +215,7 @@ async function renderGroupEditForm(groupName = null) {
     : "Criando um novo grupo de atividades.";
   modalSaveBtn.style.display = "inline-flex";
   modalHeaderActions.innerHTML = "";
-  modalBody.innerHTML = `<div class="space-y-4"><div><label for="group-name-input" class="font-bold text-primary">Nome do Grupo:</label><input type="text" id="group-name-input" value="${group.groupName}" class="w-full p-2 border border-gray-300 rounded-md mt-1" placeholder="Ex: Escavação Total C2+C3"></div><div><label for="activity-group-select" class="font-semibold text-primary mt-2 block">Atividades do Grupo:</label><select id="activity-group-select" multiple></select></div></div>`;
+  modalBody.innerHTML = `<div class="space-y-4"><div><label for="group-name-input" class="font-bold text-primary">Nome do Grupo:</label><input type="text" id="group-name-input" value="${group.groupName}" class="form-input mt-1" placeholder="Ex: Escavação Total C2+C3"></div><div><label for="activity-group-select" class="font-semibold text-primary mt-2 block">Atividades do Grupo:</label><select id="activity-group-select" multiple></select></div></div>`;
   const usedTaskCodes = new Set();
   savedMapping.forEach((g) => {
     if (g.groupName !== groupName) {
@@ -318,9 +318,9 @@ async function renderCustomValueEditForm(id = null) {
   modalSubtitle.textContent = id
     ? `Editando valor para "${value.name || id}"`
     : "Criando um novo valor personalizado.";
-  modalBody.innerHTML = `<div class="space-y-4"><div><label for="custom-value-select" class="font-bold text-primary">Atividade ou Grupo</label><select id="custom-value-select" class="mt-1"></select></div><div class="grid grid-cols-2 gap-4"><div><label for="custom-planned-input" class="font-bold text-primary">Previsto Personalizado</label><input type="number" step="any" id="custom-planned-input" class="w-full p-2 border border-gray-300 rounded-md mt-1" value="${
+  modalBody.innerHTML = `<div class="space-y-4"><div><label for="custom-value-select" class="font-bold text-primary">Atividade ou Grupo</label><select id="custom-value-select" class="mt-1"></select></div><div class="grid grid-cols-2 gap-4"><div><label for="custom-planned-input" class="font-bold text-primary">Previsto Personalizado</label><input type="number" step="any" id="custom-planned-input" class="form-input mt-1" value="${
     value.planned ?? ""
-  }" placeholder="Ex: 1500.50"></div><div><label for="custom-actual-input" class="font-bold text-primary">Realizado Personalizado</label><input type="number" step="any" id="custom-actual-input" class="w-full p-2 border border-gray-300 rounded-md mt-1" value="${
+  }" placeholder="Ex: 1500.50"></div><div><label for="custom-actual-input" class="font-bold text-primary">Realizado Personalizado</label><input type="number" step="any" id="custom-actual-input" class="form-input mt-1" value="${
     value.actual ?? ""
   }" placeholder="Ex: 750.25"></div></div></div>`;
   const usedValueIds = new Set(savedValues.map((v) => v.id));
@@ -470,18 +470,26 @@ async function deleteCustomValue(id) {
 }
 
 async function processAndSaveWeeksFile(file) {
+  const feedbackEl = document.getElementById("weeks-feedback");
   if (!file) {
     utils.showToast("Por favor, selecione um arquivo.", "error");
+    if (feedbackEl)
+      feedbackEl.textContent = "Erro: Por favor, selecione um arquivo.";
     return;
   }
   if (!file.name.toLowerCase().endsWith(".xlsx")) {
     utils.showToast("Tipo de arquivo inválido. Use um arquivo .xlsx", "error");
     document.getElementById("weeks-file-name").textContent = "";
+    if (feedbackEl)
+      feedbackEl.textContent =
+        "Erro: Tipo de arquivo inválido. Use um arquivo .xlsx";
     return;
   }
   const reader = new FileReader();
   reader.onload = async (e) => {
     try {
+      if (feedbackEl)
+        feedbackEl.textContent = `Arquivo ${file.name} selecionado. Processando...`;
       const data = new Uint8Array(e.target.result);
       const workbook = XLSX.read(data, { type: "array" });
       const sheetName = workbook.SheetNames[0];
@@ -529,10 +537,14 @@ async function processAndSaveWeeksFile(file) {
       }));
       await storage.saveData(storage.APP_KEYS.WEEKS_DATA_KEY, finalData);
       utils.showToast("Mapeamento de semanas salvo com sucesso!", "success");
+      if (feedbackEl)
+        feedbackEl.textContent = "Mapeamento de semanas salvo com sucesso!";
       setTimeout(closeModal, 1500);
     } catch (err) {
       console.error(err);
       utils.showToast(`Erro ao processar o arquivo: ${err.message}`, "error");
+      if (feedbackEl)
+        feedbackEl.textContent = `Erro ao processar o arquivo: ${err.message}`;
     }
   };
   reader.readAsArrayBuffer(file);
@@ -543,8 +555,15 @@ const CONFIG_MODULES = {
     title: "Mapeamento de Semanas",
     subtitle:
       'Carregue um arquivo Excel (.xlsx) com as colunas "Semana" e "Data".',
-    setup: () =>
-      `<div id="weeks-drop-area" class="mt-4 border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-blue-500 transition-colors"><p class="text-tertiary">Arraste e solte o arquivo .xlsx aqui</p><p class="text-quaternary my-2">- OU -</p><label for="weeks-file-input" class="cursor-pointer bg-blue-100 text-blue-700 font-semibold px-4 py-2 rounded-md hover:bg-blue-200">Selecionar Arquivo</label><input type="file" id="weeks-file-input" accept=".xlsx" class="hidden"/><p id="weeks-file-name" class="mt-4 text-sm font-medium text-primary"></p></div>`,
+    setup: () => `
+             <div id="weeks-drop-area" class="drop-area" tabindex="0" role="region" aria-labelledby="modal-title" aria-describedby="modal-subtitle">
+                <p class="text-xl text-tertiary mb-4">Arraste e solte o arquivo .xlsx aqui</p>
+                <p class="text-quaternary mb-4">- OU -</p>
+                <label for="weeks-file-input" class="file-input-label">Selecionar Arquivo</label>
+                <input type="file" id="weeks-file-input" accept=".xlsx" class="sr-only"/>
+                <p id="weeks-file-name" class="mt-4 text-sm font-medium text-primary"></p>
+                <div id="weeks-feedback" class="sr-only" aria-live="polite"></div>
+             </div>`,
     save: null,
   },
   resource: {
@@ -565,7 +584,7 @@ const CONFIG_MODULES = {
             }>${r.rsrc_name}</option>`
         )
         .join("");
-      return `<label for="modal-resource-select" class="sr-only">Recurso Principal</label><select id="modal-resource-select" class="w-full p-2 border border-gray-300 rounded-md">${options}</select>`;
+      return `<label for="modal-resource-select" class="sr-only">Recurso Principal</label><select id="modal-resource-select" class="form-input">${options}</select>`;
     },
     save: async () => {
       modalSaveBtn.disabled = true;
@@ -707,19 +726,20 @@ const CONFIG_MODULES = {
     setup: () => `
                 <div class="space-y-6">
                     <div>
-                        <h3 class="font-semibold text-lg text-primary mb-2">Exportar Dados</h3>
-                        <p class="text-secondary mb-4">Clique no botão para baixar um arquivo .json contendo todos os projetos, configurações e valores personalizados.</p>
+                        <h3 id="export-title" class="font-semibold text-lg text-primary mb-2">Exportar Dados</h3>
+                        <p id="export-subtitle" class="text-secondary mb-4">Clique no botão para baixar um arquivo .json contendo todos os projetos, configurações e valores personalizados.</p>
                         <button id="export-btn" class="w-full bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 font-semibold">Exportar Todos os Dados</button>
                     </div>
                     <div class="border-t pt-6">
-                        <h3 class="font-semibold text-lg text-primary mb-2">Importar Dados</h3>
-                        <p class="text-secondary mb-4">Arraste um arquivo de backup (.json) ou selecione-o para restaurar os dados. <strong class="text-red-600">Atenção: Isso substituirá todos os dados atuais.</strong></p>
-                        <div id="import-drop-area" class="mt-4 border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-blue-500 transition-colors">
-                            <p class="text-tertiary">Arraste e solte o arquivo .json aqui</p>
-                            <p class="text-quaternary my-2">- OU -</p>
-                            <label for="import-file-input" class="cursor-pointer bg-blue-100 text-blue-700 font-semibold px-4 py-2 rounded-md hover:bg-blue-200">Selecionar Arquivo de Backup</label>
-                            <input type="file" id="import-file-input" accept=".json" class="hidden"/>
+                        <h3 id="import-title" class="font-semibold text-lg text-primary mb-2">Importar Dados</h3>
+                        <p id="import-subtitle" class="text-secondary mb-4">Arraste um arquivo de backup (.json) ou selecione-o para restaurar os dados. <strong class="text-red-600">Atenção: Isso substituirá todos os dados atuais.</strong></p>
+                        <div id="import-drop-area" class="drop-area" tabindex="0" role="region" aria-labelledby="import-title" aria-describedby="import-subtitle">
+                            <p class="text-xl text-tertiary mb-4">Arraste e solte o arquivo .json aqui</p>
+                            <p class="text-quaternary my-4">- OU -</p>
+                            <label for="import-file-input" class="file-input-label">Selecionar Arquivo de Backup</label>
+                            <input type="file" id="import-file-input" accept=".json" class="sr-only"/>
                             <p id="import-file-name" class="mt-4 text-sm font-medium text-primary"></p>
+                            <div id="import-feedback" class="sr-only" aria-live="polite"></div>
                         </div>
                         <button id="start-import-btn" class="mt-4 w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 font-semibold disabled:bg-gray-400 disabled:cursor-not-allowed" disabled>Confirmar e Importar Arquivo</button>
                     </div>
@@ -763,6 +783,13 @@ const CONFIG_MODULES = {
       const dropArea = document.getElementById("weeks-drop-area");
       const fileInput = document.getElementById("weeks-file-input");
       const fileNameDisplay = document.getElementById("weeks-file-name");
+
+      dropArea.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          fileInput.click();
+        }
+      });
 
       const handleFile = (file) => {
         if (file) {
@@ -864,10 +891,20 @@ const CONFIG_MODULES = {
       const importDropArea = document.getElementById("import-drop-area");
       const importFileNameDisplay = document.getElementById("import-file-name");
 
+      importDropArea.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          importInput.click();
+        }
+      });
+
       const handleFileSelection = (selectedFile) => {
+        const feedbackEl = document.getElementById("import-feedback");
         if (selectedFile && selectedFile.name.toLowerCase().endsWith(".json")) {
           fileToImport = selectedFile;
           importFileNameDisplay.textContent = `Arquivo: ${fileToImport.name}`;
+          if (feedbackEl)
+            feedbackEl.textContent = `Arquivo ${fileToImport.name} selecionado.`;
           importBtn.disabled = false;
           importDropArea.classList.add("border-green-500", "bg-green-50");
           importDropArea.classList.remove("border-red-500", "bg-red-50");
@@ -878,6 +915,9 @@ const CONFIG_MODULES = {
           if (selectedFile) {
             importFileNameDisplay.textContent =
               "Por favor, use um arquivo .json válido.";
+            if (feedbackEl)
+              feedbackEl.textContent =
+                "Erro: Por favor, use um arquivo .json válido.";
             importDropArea.classList.add("border-red-500", "bg-red-50");
             utils.showToast(
               "Tipo de arquivo inválido. Apenas arquivos .json são permitidos.",
@@ -947,10 +987,16 @@ const CONFIG_MODULES = {
           importBtn.disabled = true;
           const reader = new FileReader();
           reader.onload = async function (e) {
+            const feedbackEl = document.getElementById("import-feedback");
             try {
+              if (feedbackEl)
+                feedbackEl.textContent = `Processando arquivo ${fileToImport.name}...`;
               const data = JSON.parse(e.target.result);
               const importedKeys = await storage.importAllData(data);
               if (importedKeys > 0) {
+                if (feedbackEl)
+                  feedbackEl.textContent =
+                    "Dados importados com sucesso! A página será recarregada.";
                 utils.showToast(
                   "Dados importados com sucesso! A página será recarregada.",
                   "success"
@@ -960,6 +1006,8 @@ const CONFIG_MODULES = {
                 throw new Error("O arquivo não parece ser um backup válido.");
               }
             } catch (err) {
+              if (feedbackEl)
+                feedbackEl.textContent = `Erro ao importar: ${err.message}`;
               utils.showToast(`Erro ao importar: ${err.message}`, "error");
               importBtn.textContent = "Confirmar e Importar Arquivo";
               importBtn.disabled = false;
@@ -1021,6 +1069,7 @@ async function renderRestrictionsTable() {
   if (restrictionsList.length > 0) {
     restrictionsList.forEach((restr) => {
       const linkCount = linksByRestrictionId[restr.id]?.length || 0;
+      const statusText = restr.status === "pending" ? "Pendente" : "Resolvido";
       tableHtml += `
                       <tr>
                           <td class="font-semibold">${restr.desc}</td>
@@ -1028,7 +1077,7 @@ async function renderRestrictionsTable() {
                             restr.status === "pending"
                               ? "status-pending-restr"
                               : "status-resolved-restr"
-                          }">${restr.status}</span></td>
+                          }">${statusText}</span></td>
                           <td>${linkCount}</td>
                           <td class="text-right">
                               <div class="flex items-center justify-end gap-2">
@@ -1097,18 +1146,18 @@ async function renderRestrictionEditForm(restrictionId = null) {
                     <label for="restriction-desc-input" class="font-bold text-primary">Descrição da Restrição</label>
                     <input type="text" id="restriction-desc-input" value="${
                       restriction.desc
-                    }" class="w-full p-2 border border-gray-300 rounded-md mt-1" placeholder="Ex: Atraso na entrega de material">
+                    }" class="form-input mt-1" placeholder="Ex: Atraso na entrega de material">
                   </div>
                   <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div><label for="restriction-resp-input" class="font-bold text-primary">Responsável</label><input type="text" id="restriction-resp-input" value="${
                         restriction.resp
-                      }" class="w-full p-2 border border-gray-300 rounded-md mt-1"></div>
+                      }" class="form-input mt-1"></div>
                       <div><label for="restriction-due-input" class="font-bold text-primary">Prazo</label><input type="date" id="restriction-due-input" value="${
                         restriction.due
-                      }" class="w-full p-2 border border-gray-300 rounded-md mt-1"></div>
+                      }" class="form-input mt-1"></div>
                       <div>
                           <label for="restriction-status-select" class="font-bold text-primary">Status</label>
-                          <select id="restriction-status-select" class="w-full p-2 border border-gray-300 rounded-md mt-1">
+                          <select id="restriction-status-select" class="form-input mt-1">
                               <option value="pending" ${
                                 restriction.status === "pending"
                                   ? "selected"

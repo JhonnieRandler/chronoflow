@@ -17,6 +17,8 @@ utils.insertHeader();
 const taskSelectEl = document.getElementById("task-select");
 const analysisOutput = document.getElementById("analysis-output");
 const projectInfo = document.getElementById("project-info");
+const taskSelectorWrapper = document.getElementById("task-selector-wrapper");
+const taskSelectorSkeleton = document.getElementById("task-selector-skeleton");
 
 let projectBase = null,
   projectVersions = {},
@@ -68,12 +70,14 @@ const PRED_TYPE_MAP = {
       projectInfo.textContent =
         "Nenhum projeto base encontrado. Faça o upload de um arquivo .xer.";
       analysisOutput.innerHTML = "";
+      taskSelectorSkeleton.classList.add("hidden");
       return;
     }
     if (Object.keys(projectVersions).length === 0) {
       projectInfo.textContent =
         "Nenhuma versão de projeto encontrada. Faça o upload de um arquivo .xer.";
       analysisOutput.innerHTML = "";
+      taskSelectorSkeleton.classList.add("hidden");
       return;
     }
 
@@ -96,6 +100,7 @@ const PRED_TYPE_MAP = {
     if (!latestVersionId) {
       projectInfo.textContent =
         "Não foi possível encontrar a versão mais recente do projeto.";
+      taskSelectorSkeleton.classList.add("hidden");
       return;
     }
 
@@ -116,9 +121,12 @@ const PRED_TYPE_MAP = {
         )}).`;
 
     populateTaskSelect();
+    taskSelectorSkeleton.classList.add("hidden");
+    taskSelectorWrapper.classList.remove("hidden");
   } catch (e) {
     console.error(e);
     analysisOutput.innerHTML = `<div class="message-box" role="alert" style="color: #ef4444;">Erro ao carregar dados: ${e.message}</div>`;
+    taskSelectorSkeleton.classList.add("hidden");
   }
 })();
 

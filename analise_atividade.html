@@ -22,10 +22,18 @@
         </h1>
         <p id="project-info" class="text-secondary mb-6">Carregando dados...</p>
         <div class="mb-6">
-          <div class="w-full max-w-lg">
-            <label for="task-select" class="block font-medium text-primary mb-1"
-              >Selecione la Atividade ou Grupo:</label
-            >
+          <label for="task-select" class="block font-medium text-primary mb-1"
+            >Selecione a Atividade ou Grupo:</label
+          >
+          <!-- Skeleton Loader for the select input -->
+          <div id="task-selector-skeleton" class="w-full max-w-lg">
+            <div
+              class="skeleton skeleton-block"
+              style="height: 46px; border-radius: 0.5rem"
+            ></div>
+          </div>
+          <!-- Actual select input, hidden by default -->
+          <div id="task-selector-wrapper" class="w-full max-w-lg hidden">
             <select
               id="task-select"
               placeholder="Digite para buscar..."

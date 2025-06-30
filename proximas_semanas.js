@@ -452,7 +452,7 @@ async function renderCurrentWeekView() {
                     </h3>
                     <p class="text-base font-normal text-tertiary mt-1">${dateRange}</p>
                   </div>
-                  <button id="toggle-all-btn" data-state="collapsed" class="text-sm p-2 rounded-md hover:bg-blue-50 transition-colors self-start toggle-all-button">Expandir Tudo</button>
+                  <button id="toggle-all-btn" data-state="collapsed" class="text-sm p-2 rounded-md toggle-all-button">Expandir Tudo</button>
               </div>
               ${weekContent}
             </div>`;
