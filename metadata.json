@@ -1,5 +1,6 @@
 {
-  "name": "ChronoFlow",
+  "name": "ChronoFlow 2",
   "description": "Sistema para análise e acompanhamento de cronogramas do Primavera P6.",
-  "author": "Jhon Randler"
+  "author": "Jhon Randler",
+  "requestFramePermissions": []
 }
