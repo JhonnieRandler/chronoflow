@@ -27,6 +27,7 @@ export function insertHeader() {
       href: "visualizador.html",
       text: "Visualizador",
       icon: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>',
+      isDesktopOnly: true,
     },
     {
       href: "configuracao.html",
@@ -42,7 +43,7 @@ export function insertHeader() {
 
   const navHtml = `
     <nav class="vertical-nav" aria-label="Navegação Principal">
-      <div class="nav-header">
+      <div class="nav-header hidden">
          <a href="index.html" class="nav-brand">
             <span class="nav-icon">
                 <img src="logo.png" alt="ChronoFlow Logo" class="h-6 w-6">
@@ -67,8 +68,11 @@ export function insertHeader() {
           ${navLinks
             .map((link) => {
               const isActive = link.href === currentPage;
+              const responsiveClass = link.isDesktopOnly
+                ? "hidden md:flex"
+                : "flex";
               return `
-            <a href="${link.href}" class="nav-link ${
+            <a href="${link.href}" class="nav-link ${responsiveClass} ${
                 isActive ? "active" : ""
               }" ${isActive ? 'aria-current="page"' : ""} title="${link.text}">
               <span class="nav-icon">${link.icon}</span>
@@ -94,7 +98,7 @@ export function insertHeader() {
         </div>
     </nav>
     <div class="sidebar-backdrop"></div>
-    <button class="mobile-menu-toggle" aria-label="Abrir menu de navegação">
+    <button class="mobile-menu-toggle" aria-label="Abrir menu de navegação" aria-haspopup="true" aria-expanded="false">
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
         <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
       </svg>
@@ -112,12 +116,14 @@ export function insertHeader() {
   function openSidebar() {
     verticalNav.classList.add("is-open");
     backdrop.classList.add("is-visible");
+    mobileMenuToggle.setAttribute("aria-expanded", "true");
     document.body.style.overflow = "hidden";
   }
 
   function closeSidebar() {
     verticalNav.classList.remove("is-open");
     backdrop.classList.remove("is-visible");
+    mobileMenuToggle.setAttribute("aria-expanded", "false");
     document.body.style.overflow = "";
   }
 

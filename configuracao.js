@@ -471,15 +471,22 @@ async function deleteCustomValue(id) {
 
 async function processAndSaveWeeksFile(file) {
   const feedbackEl = document.getElementById("weeks-feedback");
+  const dropAreaEl = document.getElementById("weeks-drop-area");
+  const confirmationAreaEl = document.getElementById("weeks-confirmation-area");
+
   if (!file) {
-    utils.showToast("Por favor, selecione um arquivo.", "error");
-    if (feedbackEl)
-      feedbackEl.textContent = "Erro: Por favor, selecione um arquivo.";
+    utils.showToast("Nenhum arquivo para processar.", "error");
     return;
   }
+
+  if (dropAreaEl) dropAreaEl.classList.add("hidden");
+  if (confirmationAreaEl) confirmationAreaEl.classList.add("hidden");
+
+  modalBody.innerHTML +=
+    '<div class="message-box info mt-4">Processando arquivo...</div>';
+
   if (!file.name.toLowerCase().endsWith(".xlsx")) {
     utils.showToast("Tipo de arquivo inválido. Use um arquivo .xlsx", "error");
-    document.getElementById("weeks-file-name").textContent = "";
     if (feedbackEl)
       feedbackEl.textContent =
         "Erro: Tipo de arquivo inválido. Use um arquivo .xlsx";
@@ -488,8 +495,6 @@ async function processAndSaveWeeksFile(file) {
   const reader = new FileReader();
   reader.onload = async (e) => {
     try {
-      if (feedbackEl)
-        feedbackEl.textContent = `Arquivo ${file.name} selecionado. Processando...`;
       const data = new Uint8Array(e.target.result);
       const workbook = XLSX.read(data, { type: "array" });
       const sheetName = workbook.SheetNames[0];
@@ -537,14 +542,11 @@ async function processAndSaveWeeksFile(file) {
       }));
       await storage.saveData(storage.APP_KEYS.WEEKS_DATA_KEY, finalData);
       utils.showToast("Mapeamento de semanas salvo com sucesso!", "success");
-      if (feedbackEl)
-        feedbackEl.textContent = "Mapeamento de semanas salvo com sucesso!";
       setTimeout(closeModal, 1500);
     } catch (err) {
       console.error(err);
       utils.showToast(`Erro ao processar o arquivo: ${err.message}`, "error");
-      if (feedbackEl)
-        feedbackEl.textContent = `Erro ao processar o arquivo: ${err.message}`;
+      if (dropAreaEl) dropAreaEl.classList.remove("hidden"); // Show drop area again on error
     }
   };
   reader.readAsArrayBuffer(file);
@@ -557,13 +559,20 @@ const CONFIG_MODULES = {
       'Carregue um arquivo Excel (.xlsx) com as colunas "Semana" e "Data".',
     setup: () => `
              <div id="weeks-drop-area" class="drop-area" tabindex="0" role="region" aria-labelledby="modal-title" aria-describedby="modal-subtitle">
-                <p class="text-xl text-tertiary mb-4">Arraste e solte o arquivo .xlsx aqui</p>
-                <p class="text-quaternary mb-4">- OU -</p>
+                <p class="text-xl text-tertiary mb-4 hidden md:block">Arraste e solte o arquivo .xlsx aqui</p>
+                <p class="text-quaternary mb-4 hidden md:block">- OU -</p>
                 <label for="weeks-file-input" class="file-input-label">Selecionar Arquivo</label>
                 <input type="file" id="weeks-file-input" accept=".xlsx" class="sr-only"/>
-                <p id="weeks-file-name" class="mt-4 text-sm font-medium text-primary"></p>
-                <div id="weeks-feedback" class="sr-only" aria-live="polite"></div>
-             </div>`,
+             </div>
+             <div id="weeks-confirmation-area" class="confirmation-area hidden">
+                <p class="text-secondary mb-4">Arquivo selecionado: <strong id="weeks-confirm-file-name" class="text-primary"></strong></p>
+                <div class="flex justify-center gap-4">
+                  <button id="weeks-cancel-btn" class="px-4 py-2 bg-gray-200 text-primary rounded-md hover:bg-gray-300">Cancelar</button>
+                  <button id="weeks-process-btn" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-semibold">Processar Arquivo</button>
+                </div>
+              </div>
+              <div id="weeks-feedback" class="sr-only" aria-live="polite"></div>
+             `,
     save: null,
   },
   resource: {
@@ -734,14 +743,19 @@ const CONFIG_MODULES = {
                         <h3 id="import-title" class="font-semibold text-lg text-primary mb-2">Importar Dados</h3>
                         <p id="import-subtitle" class="text-secondary mb-4">Arraste um arquivo de backup (.json) ou selecione-o para restaurar os dados. <strong class="text-red-600">Atenção: Isso substituirá todos os dados atuais.</strong></p>
                         <div id="import-drop-area" class="drop-area" tabindex="0" role="region" aria-labelledby="import-title" aria-describedby="import-subtitle">
-                            <p class="text-xl text-tertiary mb-4">Arraste e solte o arquivo .json aqui</p>
-                            <p class="text-quaternary my-4">- OU -</p>
+                            <p class="text-xl text-tertiary mb-4 hidden md:block">Arraste e solte o arquivo .json aqui</p>
+                            <p class="text-quaternary my-4 hidden md:block">- OU -</p>
                             <label for="import-file-input" class="file-input-label">Selecionar Arquivo de Backup</label>
                             <input type="file" id="import-file-input" accept=".json" class="sr-only"/>
-                            <p id="import-file-name" class="mt-4 text-sm font-medium text-primary"></p>
-                            <div id="import-feedback" class="sr-only" aria-live="polite"></div>
                         </div>
-                        <button id="start-import-btn" class="mt-4 w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 font-semibold disabled:bg-gray-400 disabled:cursor-not-allowed" disabled>Confirmar e Importar Arquivo</button>
+                         <div id="import-confirmation-area" class="confirmation-area hidden">
+                            <p class="text-secondary mb-4">Arquivo selecionado: <strong id="import-confirm-file-name" class="text-primary"></strong></p>
+                            <div class="flex justify-center gap-4">
+                              <button id="import-cancel-btn" class="px-4 py-2 bg-gray-200 text-primary rounded-md hover:bg-gray-300">Cancelar</button>
+                              <button id="import-process-btn" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-semibold">Confirmar e Importar</button>
+                            </div>
+                        </div>
+                        <div id="import-feedback" class="sr-only" aria-live="polite"></div>
                     </div>
                 </div>`,
     save: null,
@@ -776,13 +790,53 @@ const CONFIG_MODULES = {
 
   async function handleCardClick(module) {
     await openModal(module);
+    let selectedFile = null;
 
     // Post-modal-open setup for specific modules
     if (module === CONFIG_MODULES.weeks) {
       document.getElementById("modal-footer").style.display = "none";
       const dropArea = document.getElementById("weeks-drop-area");
       const fileInput = document.getElementById("weeks-file-input");
-      const fileNameDisplay = document.getElementById("weeks-file-name");
+      const confirmationArea = document.getElementById(
+        "weeks-confirmation-area"
+      );
+      const confirmFileName = document.getElementById(
+        "weeks-confirm-file-name"
+      );
+      const processBtn = document.getElementById("weeks-process-btn");
+      const cancelBtn = document.getElementById("weeks-cancel-btn");
+
+      const showConfirmation = (file) => {
+        selectedFile = file;
+        confirmFileName.textContent = file.name;
+        dropArea.classList.add("hidden");
+        confirmationArea.classList.remove("hidden");
+      };
+
+      const hideConfirmation = () => {
+        selectedFile = null;
+        fileInput.value = ""; // Reset file input
+        dropArea.classList.remove("hidden");
+        confirmationArea.classList.add("hidden");
+      };
+
+      processBtn.onclick = () => processAndSaveWeeksFile(selectedFile);
+      cancelBtn.onclick = hideConfirmation;
+
+      const handleFile = (file, source) => {
+        if (!file || !file.name.toLowerCase().endsWith(".xlsx")) {
+          utils.showToast(
+            "Tipo de arquivo inválido. Use um arquivo .xlsx",
+            "error"
+          );
+          return;
+        }
+        if (source === "click") {
+          showConfirmation(file);
+        } else {
+          processAndSaveWeeksFile(file);
+        }
+      };
 
       dropArea.addEventListener("keydown", (e) => {
         if (e.key === "Enter" || e.key === " ") {
@@ -790,14 +844,6 @@ const CONFIG_MODULES = {
           fileInput.click();
         }
       });
-
-      const handleFile = (file) => {
-        if (file) {
-          fileNameDisplay.textContent = `Arquivo: ${file.name}`;
-          processAndSaveWeeksFile(file);
-        }
-      };
-
       ["dragenter", "dragover", "dragleave", "drop"].forEach((eventName) =>
         dropArea.addEventListener(
           eventName,
@@ -811,29 +857,29 @@ const CONFIG_MODULES = {
       ["dragenter", "dragover"].forEach((eventName) =>
         dropArea.addEventListener(
           eventName,
-          () => dropArea.classList.add("border-blue-500", "bg-blue-50"),
+          () => dropArea.classList.add("highlight"),
           false
         )
       );
       ["dragleave", "drop"].forEach((eventName) =>
         dropArea.addEventListener(
           eventName,
-          () => dropArea.classList.remove("border-blue-500", "bg-blue-50"),
+          () => dropArea.classList.remove("highlight"),
           false
         )
       );
       dropArea.addEventListener(
         "drop",
-        async (e) => {
+        (e) => {
           if (e.dataTransfer.files.length > 0) {
-            handleFile(e.dataTransfer.files[0]);
+            handleFile(e.dataTransfer.files[0], "drag");
           }
         },
         false
       );
       fileInput.addEventListener("change", () => {
         if (fileInput.files.length > 0) {
-          handleFile(fileInput.files[0]);
+          handleFile(fileInput.files[0], "click");
         }
       });
     } else if (module === CONFIG_MODULES["hidden-activities"]) {
@@ -887,9 +933,93 @@ const CONFIG_MODULES = {
       };
 
       const importInput = document.getElementById("import-file-input");
-      const importBtn = document.getElementById("start-import-btn");
       const importDropArea = document.getElementById("import-drop-area");
-      const importFileNameDisplay = document.getElementById("import-file-name");
+      const confirmationArea = document.getElementById(
+        "import-confirmation-area"
+      );
+      const confirmFileName = document.getElementById(
+        "import-confirm-file-name"
+      );
+      const processBtn = document.getElementById("import-process-btn");
+      const cancelBtn = document.getElementById("import-cancel-btn");
+
+      const processImportFile = (file) => {
+        if (!file) return;
+
+        confirmationArea.classList.add("hidden");
+        modalBody.innerHTML +=
+          '<div class="message-box info mt-4">Importando arquivo...</div>';
+
+        const reader = new FileReader();
+        reader.onload = async function (e) {
+          const feedbackEl = document.getElementById("import-feedback");
+          try {
+            if (feedbackEl)
+              feedbackEl.textContent = `Processando arquivo ${file.name}...`;
+            const data = JSON.parse(e.target.result);
+            const importedKeys = await storage.importAllData(data);
+            if (importedKeys > 0) {
+              if (feedbackEl)
+                feedbackEl.textContent =
+                  "Dados importados com sucesso! A página será recarregada.";
+              utils.showToast(
+                "Dados importados com sucesso! A página será recarregada.",
+                "success"
+              );
+              setTimeout(() => window.location.reload(), 2000);
+            } else {
+              throw new Error("O arquivo não parece ser um backup válido.");
+            }
+          } catch (err) {
+            if (feedbackEl)
+              feedbackEl.textContent = `Erro ao importar: ${err.message}`;
+            utils.showToast(`Erro ao importar: ${err.message}`, "error");
+            importDropArea.classList.remove("hidden"); // Show drop area again on error
+          }
+        };
+        reader.readAsText(file);
+      };
+
+      const showConfirmation = (file) => {
+        fileToImport = file;
+        confirmFileName.textContent = file.name;
+        importDropArea.classList.add("hidden");
+        confirmationArea.classList.remove("hidden");
+      };
+
+      const hideConfirmation = () => {
+        fileToImport = null;
+        importInput.value = "";
+        importDropArea.classList.remove("hidden");
+        confirmationArea.classList.add("hidden");
+      };
+
+      processBtn.onclick = () => {
+        if (
+          fileToImport &&
+          confirm(
+            "Tem certeza que deseja importar este arquivo? Todos os dados atuais (projetos, configurações, etc.) serão substituídos. Esta ação não pode ser desfeita."
+          )
+        ) {
+          processImportFile(fileToImport);
+        }
+      };
+      cancelBtn.onclick = hideConfirmation;
+
+      const handleFileSelection = (selectedFile, source) => {
+        if (selectedFile && selectedFile.name.toLowerCase().endsWith(".json")) {
+          if (source === "click") {
+            showConfirmation(selectedFile);
+          } else {
+            processImportFile(selectedFile);
+          }
+        } else if (selectedFile) {
+          utils.showToast(
+            "Tipo de arquivo inválido. Apenas arquivos .json são permitidos.",
+            "error"
+          );
+        }
+      };
 
       importDropArea.addEventListener("keydown", (e) => {
         if (e.key === "Enter" || e.key === " ") {
@@ -897,43 +1027,11 @@ const CONFIG_MODULES = {
           importInput.click();
         }
       });
-
-      const handleFileSelection = (selectedFile) => {
-        const feedbackEl = document.getElementById("import-feedback");
-        if (selectedFile && selectedFile.name.toLowerCase().endsWith(".json")) {
-          fileToImport = selectedFile;
-          importFileNameDisplay.textContent = `Arquivo: ${fileToImport.name}`;
-          if (feedbackEl)
-            feedbackEl.textContent = `Arquivo ${fileToImport.name} selecionado.`;
-          importBtn.disabled = false;
-          importDropArea.classList.add("border-green-500", "bg-green-50");
-          importDropArea.classList.remove("border-red-500", "bg-red-50");
-        } else {
-          fileToImport = null;
-          importBtn.disabled = true;
-          importDropArea.classList.remove("border-green-500", "bg-green-50");
-          if (selectedFile) {
-            importFileNameDisplay.textContent =
-              "Por favor, use um arquivo .json válido.";
-            if (feedbackEl)
-              feedbackEl.textContent =
-                "Erro: Por favor, use um arquivo .json válido.";
-            importDropArea.classList.add("border-red-500", "bg-red-50");
-            utils.showToast(
-              "Tipo de arquivo inválido. Apenas arquivos .json são permitidos.",
-              "error"
-            );
-          } else {
-            importFileNameDisplay.textContent = "";
-          }
-        }
-      };
-
-      importInput.onchange = () => {
+      importInput.onchange = () =>
         handleFileSelection(
-          importInput.files.length > 0 ? importInput.files[0] : null
+          importInput.files.length > 0 ? importInput.files[0] : null,
+          "click"
         );
-      };
 
       ["dragenter", "dragover", "dragleave", "drop"].forEach((eventName) => {
         importDropArea.addEventListener(
@@ -945,82 +1043,29 @@ const CONFIG_MODULES = {
           false
         );
       });
-      ["dragenter", "dragover"].forEach((eventName) => {
+      ["dragenter", "dragover"].forEach((eventName) =>
         importDropArea.addEventListener(
           eventName,
-          () => {
-            if (!importDropArea.classList.contains("border-green-500")) {
-              importDropArea.classList.add("border-blue-500", "bg-blue-50");
-            }
-          },
+          () => importDropArea.classList.add("highlight"),
           false
-        );
-      });
-      ["dragleave", "drop"].forEach((eventName) => {
+        )
+      );
+      ["dragleave", "drop"].forEach((eventName) =>
         importDropArea.addEventListener(
           eventName,
-          () => {
-            importDropArea.classList.remove("border-blue-500", "bg-blue-50");
-          },
+          () => importDropArea.classList.remove("highlight"),
           false
-        );
-      });
+        )
+      );
       importDropArea.addEventListener(
         "drop",
         (e) => {
           if (e.dataTransfer.files.length > 0) {
-            importInput.files = e.dataTransfer.files;
-            handleFileSelection(e.dataTransfer.files[0]);
+            handleFileSelection(e.dataTransfer.files[0], "drag");
           }
         },
         false
       );
-
-      importBtn.onclick = async () => {
-        if (
-          fileToImport &&
-          confirm(
-            "Tem certeza que deseja importar este arquivo? Todos os dados atuais (projetos, configurações, etc.) serão substituídos. Esta ação não pode ser desfeita."
-          )
-        ) {
-          importBtn.textContent = "Importando...";
-          importBtn.disabled = true;
-          const reader = new FileReader();
-          reader.onload = async function (e) {
-            const feedbackEl = document.getElementById("import-feedback");
-            try {
-              if (feedbackEl)
-                feedbackEl.textContent = `Processando arquivo ${fileToImport.name}...`;
-              const data = JSON.parse(e.target.result);
-              const importedKeys = await storage.importAllData(data);
-              if (importedKeys > 0) {
-                if (feedbackEl)
-                  feedbackEl.textContent =
-                    "Dados importados com sucesso! A página será recarregada.";
-                utils.showToast(
-                  "Dados importados com sucesso! A página será recarregada.",
-                  "success"
-                );
-                setTimeout(() => window.location.reload(), 2000);
-              } else {
-                throw new Error("O arquivo não parece ser um backup válido.");
-              }
-            } catch (err) {
-              if (feedbackEl)
-                feedbackEl.textContent = `Erro ao importar: ${err.message}`;
-              utils.showToast(`Erro ao importar: ${err.message}`, "error");
-              importBtn.textContent = "Confirmar e Importar Arquivo";
-              importBtn.disabled = false;
-            }
-          };
-          reader.readAsText(fileToImport);
-        } else if (!fileToImport) {
-          utils.showToast(
-            "Por favor, selecione um arquivo para importar.",
-            "error"
-          );
-        }
-      };
     }
   }
 

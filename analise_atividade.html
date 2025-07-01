@@ -15,35 +15,41 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <div class="analysis-page-container">
-      <div class="card">
-        <h1 class="text-3xl font-bold text-primary mb-2">
-          Análise Detalhada de Atividade
-        </h1>
-        <p id="project-info" class="text-secondary mb-6">Carregando dados...</p>
-        <div class="mb-6">
-          <label for="task-select" class="block font-medium text-primary mb-1"
-            >Selecione a Atividade ou Grupo:</label
-          >
-          <!-- Skeleton Loader for the select input -->
-          <div id="task-selector-skeleton" class="w-full max-w-lg">
-            <div
-              class="skeleton skeleton-block"
-              style="height: 46px; border-radius: 0.5rem"
-            ></div>
-          </div>
-          <!-- Actual select input, hidden by default -->
-          <div id="task-selector-wrapper" class="w-full max-w-lg hidden">
-            <select
-              id="task-select"
-              placeholder="Digite para buscar..."
-            ></select>
+    <div class="main-content">
+      <div
+        class="analysis-page-container max-w-screen-2xl mx-auto p-4 sm:p-6 lg:p-8"
+      >
+        <div class="card p-6 bg-secondary">
+          <h1 class="text-3xl font-bold text-primary mb-2">
+            Análise Detalhada de Atividade
+          </h1>
+          <p id="project-info" class="text-secondary mb-6">
+            Carregando dados...
+          </p>
+          <div class="mb-6">
+            <label for="task-select" class="block font-medium text-primary mb-1"
+              >Selecione a Atividade ou Grupo:</label
+            >
+            <!-- Skeleton Loader for the select input -->
+            <div id="task-selector-skeleton" class="w-full max-w-lg">
+              <div
+                class="skeleton skeleton-block"
+                style="height: 46px; border-radius: 0.5rem"
+              ></div>
+            </div>
+            <!-- Actual select input, hidden by default -->
+            <div id="task-selector-wrapper" class="w-full max-w-lg hidden">
+              <select
+                id="task-select"
+                placeholder="Digite para buscar..."
+              ></select>
+            </div>
           </div>
         </div>
-      </div>
-      <div id="analysis-output" class="mt-6">
-        <div class="message-box">
-          <p>Selecione uma atividade ou grupo para começar a análise.</p>
+        <div id="analysis-output" class="mt-6 space-y-6">
+          <div class="message-box">
+            <p>Selecione uma atividade ou grupo para começar a análise.</p>
+          </div>
         </div>
       </div>
     </div>

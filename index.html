@@ -10,56 +10,85 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <div class="container" id="index-container">
-      <h1 id="main-title" class="text-4xl font-bold text-primary mb-6">
-        Painel de Controle
-      </h1>
-      <p id="main-subtitle" class="text-secondary mb-8">
-        Envie seu arquivo .xer do Primavera P6 para carregar ou atualizar as
-        informações do projeto.
-      </p>
-
-      <div
-        id="drop-area"
-        class="drop-area"
-        tabindex="0"
-        role="region"
-        aria-labelledby="main-title"
-        aria-describedby="main-subtitle"
-      >
-        <p class="text-xl text-tertiary mb-4">
-          Arraste e solte o arquivo .xer aqui
-        </p>
-        <p class="text-quaternary mb-4">- OU -</p>
-        <label for="fileElem" class="file-input-label"
-          >Selecionar Arquivo</label
+    <div class="main-content">
+      <div class="max-w-4xl mx-auto p-4 sm:p-6 lg:p-8">
+        <div
+          id="index-container"
+          class="bg-secondary rounded-2xl shadow-lg p-6 md:p-10 text-center"
         >
-        <input type="file" id="fileElem" accept=".xer" class="sr-only" />
-      </div>
-
-      <div id="file-display" class="file-info hidden">
-        Último arquivo processado:
-        <span id="file-name" class="font-semibold text-primary"></span>
-      </div>
-
-      <div
-        id="file-feedback"
-        class="sr-only"
-        aria-live="polite"
-        aria-atomic="true"
-      ></div>
-
-      <section id="dashboard-section" class="dashboard-section">
-        <div id="dashboard-output">
-          <p class="message-box info">
-            Nenhuma informação de projeto carregada ainda. Por favor, envie um
-            arquivo .xer.
+          <h1
+            id="main-title"
+            class="text-3xl md:text-4xl font-bold text-primary mb-6"
+          >
+            Painel de Controle
+          </h1>
+          <p id="main-subtitle" class="text-secondary mb-8">
+            Envie seu arquivo .xer do Primavera P6 para carregar ou atualizar as
+            informações do projeto.
           </p>
-        </div>
-      </section>
-    </div>
 
-    <!-- App Scripts as a module -->
+          <div
+            id="drop-area"
+            class="drop-area"
+            tabindex="0"
+            role="region"
+            aria-labelledby="main-title"
+            aria-describedby="main-subtitle"
+          >
+            <p class="text-xl text-tertiary mb-4 hidden md:block">
+              Arraste e solte o arquivo .xer aqui
+            </p>
+            <p class="text-quaternary mb-4 hidden md:block">- OU -</p>
+            <label for="fileElem" class="file-input-label"
+              >Selecionar Arquivo</label
+            >
+            <input type="file" id="fileElem" accept=".xer" class="sr-only" />
+          </div>
+
+          <div id="confirmation-area" class="confirmation-area hidden">
+            <p class="text-secondary mb-4">
+              Arquivo selecionado:
+              <strong id="confirm-file-name" class="text-primary"></strong>
+            </p>
+            <div class="flex justify-center gap-4">
+              <button
+                id="cancel-file-btn"
+                class="px-4 py-2 bg-gray-200 text-primary rounded-md hover:bg-gray-300"
+              >
+                Cancelar
+              </button>
+              <button
+                id="process-file-btn"
+                class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-semibold"
+              >
+                Processar Arquivo
+              </button>
+            </div>
+          </div>
+
+          <div id="file-display" class="hidden mt-6">
+            <p class="file-info">
+              Arquivo carregado: <span id="file-name" class="font-bold"></span>
+            </p>
+            <p
+              id="file-feedback"
+              class="text-sm text-tertiary mt-2"
+              aria-live="polite"
+            ></p>
+          </div>
+
+          <section
+            id="dashboard-section"
+            class="dashboard-section"
+            aria-live="polite"
+          >
+            <div id="dashboard-output">
+              <p class="message-box info" role="status">Carregando dados...</p>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
     <script type="module" src="index.js"></script>
   </body>
 </html>

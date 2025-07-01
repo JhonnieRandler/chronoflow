@@ -277,7 +277,7 @@ function itemMatchesFilter(item) {
 
 function renderWeekSkeleton() {
   dashboardOutput.innerHTML = `
-        <div class="week-card" aria-live="polite" aria-busy="true">
+        <div class="card p-4 md:p-8 bg-secondary" aria-live="polite" aria-busy="true">
              <div class="sr-only">Carregando dados da semana.</div>
             <div class="week-card-header">
                 <div>
@@ -441,8 +441,8 @@ async function renderCurrentWeekView() {
   }
 
   dashboardOutput.innerHTML = `
-            <div class="week-card" aria-live="polite" aria-busy="false">
-              <div class="week-card-header">
+            <div class="card p-4 md:p-8 bg-secondary" aria-live="polite" aria-busy="false">
+              <div class="week-card-header flex flex-col items-center md:items-start text-center md:text-left md:flex-row md:items-center justify-between border-b-2 border-border-accent pb-3 mb-3 md:border-b md:border-border-primary">
                   <div>
                     <h3 class="text-2xl font-bold text-primary">
                         <span>Semana ${weekNumber}</span> 
@@ -452,7 +452,7 @@ async function renderCurrentWeekView() {
                     </h3>
                     <p class="text-base font-normal text-tertiary mt-1">${dateRange}</p>
                   </div>
-                  <button id="toggle-all-btn" data-state="collapsed" class="text-sm p-2 rounded-md toggle-all-button">Expandir Tudo</button>
+                  <button id="toggle-all-btn" data-state="collapsed" class="text-sm p-2 rounded-md toggle-all-button self-center md:self-auto mt-2 md:mt-0">Expandir Tudo</button>
               </div>
               ${weekContent}
             </div>`;
@@ -465,7 +465,7 @@ async function renderCurrentWeekView() {
   dashboardOutput.querySelectorAll(".wbs-title, .item-entry").forEach((el) => {
     // Check if the element is a direct child of the main content area (week-card)
     const isTopLevel =
-      el.parentElement.closest(".week-card") === el.parentElement.parentElement;
+      el.parentElement.closest(".card") === el.parentElement.parentElement;
     if (el.classList.contains("wbs-title") && isTopLevel) {
       el.setAttribute("tabindex", "0");
     } else {

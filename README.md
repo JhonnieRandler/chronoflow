@@ -82,12 +82,6 @@ Ferramenta de utilidade para desenvolvedores e usuários avançados que precisam
 
 O ChronoFlow evoluiu para oferecer uma experiência de usuário mais moderna, performática e agradável.
 
-### 🎨 Tema Noturno (Dark Mode) Completo
-
-- **Funcionalidade:** Um tema escuro completo e esteticamente agradável foi implementado em toda a aplicação.
-- **Persistência:** A escolha do tema (claro ou escuro) é salva no `localStorage` do navegador, mantendo a preferência do usuário entre as visitas.
-- **Benefícios:** Melhora o conforto visual em ambientes com pouca luz, reduz o cansaço ocular e melhora a acessibilidade.
-
 ### 🚀 Experiência do Usuário (UX) Aprimorada
 
 - **Feedback Visual Imediato:** Ações assíncronas, como salvar ou importar dados, agora desabilitam os botões de ação e exibem um estado de "Salvando...", prevenindo cliques duplicados e informando claramente ao usuário que o sistema está trabalhando.
@@ -98,7 +92,23 @@ O ChronoFlow evoluiu para oferecer uma experiência de usuário mais moderna, pe
 
 - **Carregamento Sob Demanda no 6WLA:** A página "6-Week Look Ahead" agora utiliza uma estratégia de "lazy loading". Em vez de processar os dados de todas as 6 semanas de uma vez, os dados são processados e renderizados sob demanda, apenas quando o usuário navega para uma semana específica. Isso resulta em um carregamento inicial da página drasticamente mais rápido, especialmente em projetos grandes.
 
-## ♿️ 5. Acessibilidade (A11y)
+## 🎨 5. Design System e Estilização
+
+Para garantir uma interface coesa, moderna e de fácil manutenção, o ChronoFlow adota uma arquitetura de estilização bem definida.
+
+### 5.1. Tema Noturno e Variáveis CSS
+
+- **Funcionalidade:** Um tema escuro completo e esteticamente agradável foi implementado em toda a aplicação para melhorar o conforto visual em ambientes com pouca luz e reduzir o cansaço ocular.
+- **Persistência:** A escolha do tema (claro ou escuro) é salva no `localStorage` do navegador, mantendo a preferência do usuário entre as visitas.
+- **Implementação:** A tematização é controlada por variáveis CSS definidas no `:root`. A classe `.dark` no `<html>` ativa um conjunto diferente de valores para essas variáveis, alterando instantaneamente a aparência de toda a aplicação.
+
+### 5.2. Arquitetura de CSS Semântico (Convivência com Tailwind)
+
+- **O Problema:** Durante a implementação, foi identificado um conflito de especificidade com o script do Tailwind CSS. O Tailwind, ao ser executado no cliente, injetava suas classes de utilitário (`text-gray-600`, etc.) no HTML após o nosso `styles.css`, fazendo com que as regras do Tailwind sobrescrevessem as customizações para o modo escuro.
+- **A Solução:** Em vez de lutar contra a especificidade do Tailwind, a arquitetura foi refatorada para trabalhar em harmonia com ele. Foram criadas **classes semânticas** (ex: `.text-primary`, `.bg-secondary`) em `styles.css`. Essas classes utilizam as variáveis de cor do tema (`--color-text-primary`, `--color-bg-secondary`). Nos arquivos HTML e templates JavaScript, as classes de cor do Tailwind foram substituídas por essas novas classes semânticas.
+- **Benefícios:** Esta abordagem elimina o conflito de ordem de carregamento, torna o HTML mais legível e garante que o sistema de temas funcione de forma robusta e previsível. A manutenção das cores é centralizada nas variáveis CSS, facilitando futuros ajustes de design.
+
+## ♿️ 6. Acessibilidade (A11y)
 
 Um grande esforço foi dedicado para tornar o ChronoFlow uma ferramenta acessível e utilizável por todos.
 
@@ -111,17 +121,17 @@ Um grande esforço foi dedicado para tornar o ChronoFlow uma ferramenta acessív
   - **Rótulos e Papéis:** Atributos ARIA (Accessible Rich Internet Applications) como `aria-label`, `role` e `aria-current` são utilizados para dar contexto e significado a ícones, botões e menus, descrevendo a interface para tecnologias assistivas.
   - **Anúncios Dinâmicos:** "Live regions" (`aria-live`) são usadas para anunciar vocalmente as notificações "toast" e as mudanças de estado de carregamento de dados, mantendo os usuários de leitores de tela informados sobre o que está acontecendo na aplicação.
 
-## 🔒 6. Segurança
+## 🔒 7. Segurança
 
 É crucial entender como a segurança funciona em uma aplicação como o ChronoFlow, que roda inteiramente no navegador do cliente (client-side).
 
-### 6.1. As Chaves em `firebase-config.js` são Públicas por Design
+### 7.1. As Chaves em `firebase-config.js` são Públicas por Design
 
 Você notará que o arquivo `firebase-config.js` contém chaves de configuração do seu projeto Firebase. É importante saber que **essas chaves não são segredos**. Elas são identificadores públicos que o Google utiliza para direcionar as requisições do seu aplicativo para o projeto Firebase correto. Qualquer pessoa que visitar o seu site poderá ver essas chaves.
 
 Tentar "esconder" essas chaves usando variáveis de ambiente ou segredos do GitHub **não é aplicável nem eficaz** para uma aplicação client-side.
 
-### 6.2. A Segurança Real está nas **Firebase Security Rules**
+### 7.2. A Segurança Real está nas **Firebase Security Rules**
 
 A verdadeira proteção dos seus dados não está em ocultar as chaves de configuração, mas sim em definir quem pode ler e escrever no seu banco de dados. Isso é feito através das **Regras de Segurança do Firebase (Firebase Security Rules)**, que são configuradas diretamente no painel do seu projeto Firebase.
 
@@ -144,11 +154,11 @@ Com esta regra, mesmo que alguém copie suas chaves do `firebase-config.js`, nã
 
 > **Recomendação Forte:** Sempre configure suas Regras de Segurança para serem o mais restritivas possível, garantindo a proteção e a integridade dos seus dados.
 
-## 🧠 7. Lógicas e Algoritmos Principais (Para Desenvolvedores)
+## 🧠 8. Lógicas e Algoritmos Principais (Para Desenvolvedores)
 
 Esta seção detalha as implementações-chave que sustentam as funcionalidades do sistema.
 
-### 7.1. Camada de Abstração de Dados (`storage.js`)
+### 8.1. Camada de Abstração de Dados (`storage.js`)
 
 - **Objetivo:** Centralizar e abstrair toda a interação com o **Firebase Cloud Firestore**. Esta é a mudança arquitetural mais importante, pois desacopla a lógica da aplicação da implementação do banco de dados.
 - **Novas Funções:**
@@ -171,13 +181,13 @@ Esta seção detalha as implementações-chave que sustentam as funcionalidades 
   const latestProjectData = { ...projectBase, ...allVersions[latestVersionId] };
   ```
 
-### 7.2. Processamento do `.XER` e Criação da Hierarquia Estável
+### 8.2. Processamento do `.XER` e Criação da Hierarquia Estável
 
 - **Função Principal:** `transformData()` em `index.js`.
 - **Problema:** Os IDs de WBS (`wbs_id`) no Primavera P6 são numéricos e podem mudar. Usá-los como referência direta levaria a inconsistências.
 - **Solução:** Foi criado um **ID Estável (`stable_wbs_id`)**. O algoritmo percorre recursivamente a árvore hierárquica de cada item da WBS, concatenando os nomes de cada nível para formar um caminho legível e único (ex: `"Projeto X > Área Y > Disciplina Z"`). Este caminho se torna a chave primária para a hierarquia.
 
-### 7.3. Modelo de Dados de Restrições Normalizado
+### 8.3. Modelo de Dados de Restrições Normalizado
 
 - **Objetivo:** Permitir que uma restrição seja vinculada a múltiplas atividades (relação muitos-para-muitos).
 - **Implementação (`storage.js`):**
@@ -185,14 +195,14 @@ Esta seção detalha as implementações-chave que sustentam as funcionalidades 
   - `RESTRICTION_LINKS_KEY`: Armazena os vínculos, com objetos do tipo `{restrictionId, itemId}`.
 - **Vantagem:** Este modelo normalizado evita a duplicação de dados, é mais escalável e permite a gestão centralizada das restrições.
 
-### 7.4. Geração da Visão Hierárquica no Dashboard Semanal
+### 8.4. Geração da Visão Hierárquica no Dashboard Semanal
 
 - **Função Principal:** `buildGroupedTreeRecursive()` em `proximas_semanas.js`.
 - **Objetivo:** Montar a estrutura de árvore aninhada das atividades com base nos níveis de WBS que o usuário selecionou na configuração.
 - **Implementação:** A função recebe uma atividade, um array dos níveis de WBS para agrupar (ex: `[1, 3]`) e a árvore de dados da semana. De forma recursiva, ela "desce" pela árvore, usando o `stable_wbs_id` da atividade para encontrar o nó correspondente em cada nível e inserir a atividade na folha correta.
 - **Otimização:** Para melhorar a performance, os dados de cada semana são processados e cacheados sob demanda ("lazy loading"), apenas na primeira vez que o usuário navega para ela.
 
-### 7.5. Animação Robusta de Hierarquias Retráteis
+### 8.5. Animação Robusta de Hierarquias Retráteis
 
 - **O Problema:** Animar a altura de elementos aninhados é um desafio. Uma abordagem ingênua falha devido a "condições de corrida" na renderização do navegador, resultando em conteúdo cortado ou saltos na animação.
 - **A Solução: Reação em Cadeia com `transitionend`**
@@ -202,18 +212,12 @@ Esta seção detalha as implementações-chave que sustentam as funcionalidades 
   3.  Ao terminar, o código notifica o "pai", que recalcula sua própria altura e inicia sua própria animação de redimensionamento.
   4.  Esse processo se repete recursivamente para cima, garantindo uma experiência de usuário fluida e sem falhas visuais.
 
-### 7.6. Gestão de Foco para Acessibilidade
+### 8.6. Gestão de Foco para Acessibilidade
 
 - **"Focus Trap":** Uma função reutilizável monitora os eventos de teclado (`Tab`) quando um modal está ativo. Ela calcula a lista de elementos focáveis dentro do modal e "prende" a navegação a essa lista, redirecionando o foco do último para o primeiro elemento (e vice-versa), garantindo uma experiência de teclado contínua e acessível.
 - **Foco Inteligente:** A lógica de expansão/recolhimento das seções WBS também gerencia o atributo `tabindex` dos elementos internos, removendo da ordem de navegação os itens que não estão visíveis.
 
-### 7.7. Arquitetura de CSS Semântico para Tematização
-
-- **O Problema:** Durante a implementação do tema noturno, foi identificado um conflito de especificidade com o script do Tailwind CSS. O Tailwind, ao ser executado no cliente, gerava dinamicamente suas próprias classes de utilitário (ex: `text-gray-600`), que eram injetadas no HTML após o nosso `styles.css`. Isso fazia com que as regras do Tailwind sobrescrevessem nossas customizações para o modo escuro a cada recarregamento de página.
-- **A Solução:** Em vez de lutar contra a especificidade do Tailwind, a arquitetura foi refatorada para trabalhar em harmonia com ele. Foram criadas classes semânticas personalizadas (ex: `.text-primary`, `.text-secondary`, `.text-tertiary`) em `styles.css`, que utilizam as variáveis de cor do tema. Todas as classes de utilitário de cor de texto (`text-gray-*`) foram substituídas por essas novas classes semânticas nos arquivos HTML e nos templates JavaScript.
-- **Benefícios:** Esta abordagem elimina completamente o conflito de ordem de carregamento, torna o HTML mais legível e garante que o sistema de temas funcione de forma robusta e previsível. A manutenção das cores é centralizada nas variáveis CSS, facilitando futuros ajustes de design.
-
-## 🚀 8. Melhorias Futuras
+## 🚀 9. Melhorias Futuras
 
 O ChronoFlow foi projetado para ser uma plataforma robusta e evolutiva. Algumas melhorias planejadas para o futuro incluem:
 

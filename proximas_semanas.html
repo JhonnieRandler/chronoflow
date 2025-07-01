@@ -14,75 +14,79 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <div class="main-container">
-      <div class="card">
-        <div
-          class="flex flex-col lg:flex-row lg:justify-between items-center gap-4"
-        >
-          <div>
-            <h1 class="text-3xl font-bold text-primary mb-2">
-              6-Week Look Ahead (6WLA)
-            </h1>
-            <p id="page-subtitle" class="text-secondary">
-              Análise de restrições das próximas 6 semanas para planejamento
-              proativo.
-            </p>
-          </div>
+    <div class="main-content">
+      <div
+        class="main-container max-w-screen-2xl mx-auto py-6 lg:py-8 px-10 md:px-20 lg:px-20 2xl:px-8"
+      >
+        <div class="card p-4 md:p-6 bg-secondary">
           <div
-            id="filter-controls"
-            class="grid grid-cols-2 gap-2 w-full lg:flex lg:w-auto"
+            class="flex flex-col md:flex-row md:justify-between items-center gap-4"
           >
-            <button class="filter-btn active" data-filter="all">Todos</button>
-            <button class="filter-btn" data-filter="start">Início</button>
-            <button class="filter-btn" data-filter="end">Fim</button>
-            <button class="filter-btn" data-filter="ongoing">
-              Em Andamento
-            </button>
+            <div class="text-center md:text-left">
+              <h1 class="text-3xl font-bold text-primary mb-2">
+                6-Week Look Ahead (6WLA)
+              </h1>
+              <p id="page-subtitle" class="text-secondary">
+                Análise de restrições das próximas 6 semanas para planejamento
+                proativo.
+              </p>
+            </div>
+            <div
+              id="filter-controls"
+              class="grid grid-cols-2 gap-2 w-full md:flex md:w-auto"
+            >
+              <button class="filter-btn active" data-filter="all">Todos</button>
+              <button class="filter-btn" data-filter="start">Início</button>
+              <button class="filter-btn" data-filter="end">Fim</button>
+              <button class="filter-btn" data-filter="ongoing">
+                Em Andamento
+              </button>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div class="carousel-container">
-        <button id="prev-btn" class="nav-button prev-btn">
-          <svg
-            class="w-6 h-6"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M15 19l-7-7 7-7"
-            ></path>
-          </svg>
-        </button>
-        <div id="dashboard-output"></div>
-        <button id="next-btn" class="nav-button next-btn">
-          <svg
-            class="w-6 h-6"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M9 5l7 7-7 7"
-            ></path>
-          </svg>
-        </button>
+        <div class="carousel-container mt-8">
+          <button id="prev-btn" class="nav-button prev-btn">
+            <svg
+              class="w-4 h-4 md:w-6 md:h-6"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M15 19l-7-7 7-7"
+              ></path>
+            </svg>
+          </button>
+          <div id="dashboard-output"></div>
+          <button id="next-btn" class="nav-button next-btn">
+            <svg
+              class="w-4 h-4 md:w-6 md:h-6"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M9 5l7 7-7 7"
+              ></path>
+            </svg>
+          </button>
+        </div>
+        <div id="week-indicators" class="week-indicators"></div>
       </div>
-      <div id="week-indicators" class="week-indicators"></div>
     </div>
 
     <!-- Modal de Restrições -->
     <div id="restriction-modal" class="modal-overlay">
-      <div class="modal-content modal-large">
+      <div class="modal-content modal-large bg-secondary">
         <div
           class="flex-shrink-0 px-6 sm:px-8 pt-6 pb-4 border-b border-gray-200"
         >

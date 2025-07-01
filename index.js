@@ -16,11 +16,17 @@ utils.insertHeader();
 
 const dropArea = document.getElementById("drop-area");
 const fileElem = document.getElementById("fileElem");
+const confirmationArea = document.getElementById("confirmation-area");
+const confirmFileNameSpan = document.getElementById("confirm-file-name");
+const processFileBtn = document.getElementById("process-file-btn");
+const cancelFileBtn = document.getElementById("cancel-file-btn");
 const fileDisplay = document.getElementById("file-display");
 const fileNameSpan = document.getElementById("file-name");
 const fileFeedback = document.getElementById("file-feedback");
 const dashboardOutput = document.getElementById("dashboard-output");
 const dashboardSection = document.getElementById("dashboard-section");
+
+let selectedFile = null;
 
 // Tables that define the project structure and are saved only once.
 const BASE_TABLE_NAMES = [
@@ -74,43 +80,35 @@ const COLUMNS_TO_SAVE_MAP = {
   TASKACTV: ["task_id_code", "actv_code_id_name"],
 };
 
-["dragenter", "dragover", "dragleave", "drop"].forEach((eventName) => {
-  dropArea.addEventListener(eventName, preventDefaults, false);
-  document.body.addEventListener(eventName, preventDefaults, false);
-});
 function preventDefaults(e) {
   e.preventDefault();
   e.stopPropagation();
 }
-["dragenter", "dragover"].forEach((eventName) =>
-  dropArea.addEventListener(eventName, highlight, false)
-);
-["dragleave", "drop"].forEach((eventName) =>
-  dropArea.addEventListener(eventName, unhighlight, false)
-);
+
 function highlight() {
   dropArea.classList.add("highlight");
 }
+
 function unhighlight() {
   dropArea.classList.remove("highlight");
 }
 
-dropArea.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" || e.key === " ") {
-    e.preventDefault();
-    fileElem.click();
-  }
-});
-
-dropArea.addEventListener("drop", handleDrop, false);
-function handleDrop(e) {
-  handleFiles(e.dataTransfer.files);
+function showConfirmationUI(file) {
+  selectedFile = file;
+  confirmFileNameSpan.textContent = file.name;
+  dropArea.classList.add("hidden");
+  confirmationArea.classList.remove("hidden");
+  fileDisplay.classList.add("hidden"); // Hide previous file info
 }
-fileElem.addEventListener("change", function (e) {
-  handleFiles(e.target.files);
-});
 
-async function handleFiles(files) {
+function hideConfirmationUI() {
+  selectedFile = null;
+  fileElem.value = ""; // Reset the file input
+  dropArea.classList.remove("hidden");
+  confirmationArea.classList.add("hidden");
+}
+
+async function handleFiles(files, source) {
   if (files.length === 0) return;
   const file = files[0];
   if (!file.name.toLowerCase().endsWith(".xer")) {
@@ -119,11 +117,23 @@ async function handleFiles(files) {
       "Erro: Por favor, selecione um arquivo com a extensão .xer.";
     return;
   }
+
+  if (source === "click") {
+    showConfirmationUI(file);
+  } else {
+    // Immediate processing for drag-and-drop
+    processFile(file);
+  }
+}
+
+async function processFile(file) {
+  if (!file) return;
+
+  hideConfirmationUI();
   fileNameSpan.textContent = file.name;
   fileDisplay.classList.remove("hidden");
-  fileFeedback.textContent = `Arquivo ${file.name} selecionado.`;
-  dashboardOutput.innerHTML = `<p class="message-box info" role="status">Processando e salvando arquivo... Isso pode levar alguns instantes.</p>`;
   fileFeedback.textContent = `Processando arquivo ${file.name}.`;
+  dashboardOutput.innerHTML = `<p class="message-box info" role="status">Processando e salvando arquivo... Isso pode levar alguns instantes.</p>`;
 
   const reader = new FileReader();
   reader.onload = async function (e) {
@@ -134,7 +144,6 @@ async function handleFiles(files) {
         parsedTables["PROJECT"]?.rows[0]?.proj_id || `UNK_${Date.now()}`;
       const transformedTables = transformData(parsedTables, currentProjectId);
 
-      // Check if the base project data already exists.
       const projectBase = await storage.getProjectBase();
       const isFirstUpload =
         !projectBase || Object.keys(projectBase).length === 0;
@@ -152,7 +161,6 @@ async function handleFiles(files) {
         await storage.saveProjectBase(baseData);
       }
 
-      // Always save the weekly version data.
       const versionData = {};
       VERSION_TABLE_NAMES.forEach((tableName) => {
         if (transformedTables[tableName]) {
@@ -174,6 +182,40 @@ async function handleFiles(files) {
     }
   };
   reader.readAsText(file, "ISO-8859-1");
+}
+
+function setupEventListeners() {
+  ["dragenter", "dragover", "dragleave", "drop"].forEach((eventName) => {
+    dropArea.addEventListener(eventName, preventDefaults, false);
+    document.body.addEventListener(eventName, preventDefaults, false);
+  });
+  ["dragenter", "dragover"].forEach((eventName) =>
+    dropArea.addEventListener(eventName, highlight, false)
+  );
+  ["dragleave", "drop"].forEach((eventName) =>
+    dropArea.addEventListener(eventName, unhighlight, false)
+  );
+
+  dropArea.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      fileElem.click();
+    }
+  });
+
+  dropArea.addEventListener(
+    "drop",
+    (e) => handleFiles(e.dataTransfer.files, "drag"),
+    false
+  );
+  fileElem.addEventListener(
+    "change",
+    (e) => handleFiles(e.target.files, "click"),
+    false
+  );
+
+  cancelFileBtn.addEventListener("click", hideConfirmationUI);
+  processFileBtn.addEventListener("click", () => processFile(selectedFile));
 }
 
 function parseXER(xerContent) {
@@ -483,6 +525,8 @@ async function loadDashboard() {
   }
 }
 
+// Initialize the page
 (async () => {
+  setupEventListeners();
   await loadDashboard();
 })();
