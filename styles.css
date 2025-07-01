@@ -357,6 +357,9 @@ html.dark .icon-moon {
 .text-quaternary {
   color: var(--color-text-quaternary);
 }
+.text-accent {
+  color: var(--color-text-accent);
+}
 .hover\:text-primary:hover {
   color: var(--color-text-primary);
 }
@@ -907,13 +910,14 @@ html.dark #modal-footer {
   align-items: center;
   gap: 1.5rem;
   cursor: pointer;
-  transition: transform 0.2s ease, box-shadow 0.2s ease,
-    background-color 0.2s ease;
+  border: 1px solid var(--color-border-primary);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
 .config-card:hover {
   transform: translateY(-4px);
   box-shadow: 0 8px 20px var(--color-shadow-hover);
+  border-color: var(--color-border-accent);
 }
 
 .config-icon {
@@ -1106,6 +1110,11 @@ html.dark .hover\:bg-gray-300:hover {
   align-items: center;
   cursor: pointer;
   width: 100%; /* Fix: Ensure button takes full width */
+  transition: background-color 0.2s ease;
+}
+
+.wbs-title:hover {
+  background-color: var(--color-bg-quaternary);
 }
 
 .wbs-toggle {

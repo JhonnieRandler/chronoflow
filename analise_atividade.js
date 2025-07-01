@@ -158,7 +158,7 @@ function populateTaskSelect() {
 function renderAnalysisSkeleton() {
   analysisOutput.innerHTML = `
         <div role="status" aria-label="Carregando análise da atividade">
-            <div class="card">
+            <div class="card p-6 bg-secondary">
                 <div class="flex justify-between items-start mb-2">
                     <div class="skeleton skeleton-title" style="width: 70%;"></div>
                     <div class="skeleton skeleton-block" style="width: 100px; height: 1.75rem;"></div>
@@ -172,11 +172,11 @@ function renderAnalysisSkeleton() {
                       .join("")}
                 </div>
             </div>
-            <div class="card">
+            <div class="card p-6 bg-secondary">
                 <div class="skeleton skeleton-title" style="width: 40%;"></div>
                 <div class="skeleton skeleton-block" style="height: 150px;"></div>
             </div>
-             <div class="card">
+             <div class="card p-6 bg-secondary">
                 <div class="skeleton skeleton-title" style="width: 60%;"></div>
                 <div class="skeleton skeleton-block" style="height: 200px;"></div>
             </div>
