@@ -221,7 +221,7 @@ function renderGenuineValuesCard(itemId) {
   const progress = planned > 0 ? (actual / planned) * 100 : 0;
 
   return `
-            <div class="card genuine-card">
+            <div class="card p-6 genuine-card">
                 <h2 class="text-xl font-bold text-yellow-800 mb-4">Análise de Valores Topográficos</h2>
                 <div class="info-grid">
                     <div class="info-item genuine-item">
@@ -361,7 +361,7 @@ function displayActivityAnalysis(taskCode) {
           .join("");
 
   let html = `
-        <div class="card">
+        <div class="card p-6 bg-secondary">
             <div class="flex justify-between items-start mb-2"><h2 class="text-2xl font-bold text-primary">${
               task.task_code
             }: ${task.task_name}</h2><span class="badge ${statusInfo.class}">${
@@ -391,7 +391,7 @@ function displayActivityAnalysis(taskCode) {
             </div>
         </div>
         ${renderGenuineValuesCard(taskCode)}
-        <div class="card"><h2 class="text-xl font-bold text-primary mb-4">Relacionamentos</h2><div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="card p-6 bg-secondary"><h2 class="text-xl font-bold text-primary mb-4">Relacionamentos</h2><div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div><h3 class="font-semibold text-secondary mb-2">Predecessoras</h3><div class="table-container"><table><thead><tr><th>Atividade</th><th>Tipo</th><th>Lag</th></tr></thead><tbody>${renderRelRows(
               preds,
               "predecessora"
@@ -401,14 +401,14 @@ function displayActivityAnalysis(taskCode) {
               "sucessora"
             )}</tbody></table></div></div>
         </div></div>
-        <div class="card">
+        <div class="card p-6 bg-secondary">
             <h2 class="text-xl font-bold text-primary mb-4">Histórico Semanal de Recursos (Cronograma)</h2>
             <div class="table-container"><table><thead><tr><th>Semana</th><th>Recurso</th><th class="text-right">Qtd. Planejada</th><th class="text-right">Qtd. Real</th><th class="text-right">Qtd. Restante</th><th class="text-right">% Avanço</th></tr></thead><tbody>${weeklyRowsHtml}</tbody></table></div>
         </div>
         ${
           task.status_code !== "TK_NotStart"
             ? `
-        <div class="card">
+        <div class="card p-6 bg-secondary">
             <h2 class="text-xl font-bold text-primary mb-4">Gráfico de Evolução Material</h2>
             <div><canvas id="resourceChart"></canvas></div>
         </div>`
@@ -584,7 +584,7 @@ function displayGroupAnalysis(groupId) {
     .join("");
 
   let html = `
-        <div class="card">
+        <div class="card p-6 bg-secondary">
             <div class="flex justify-between items-start mb-4"><h2 class="text-2xl font-bold text-primary">${groupName}</h2><span class="badge status-group">Grupo de Atividades</span></div>
             <div class="info-grid">
                  <div class="info-item"><span class="info-item-label">Início Planejado (Agregado)</span><span class="info-item-value">${utils.formatBrazilianDate(
@@ -601,12 +601,12 @@ function displayGroupAnalysis(groupId) {
   )}</span></div>
             </div>
         </div>
-        <div class="card">
+        <div class="card p-6 bg-secondary">
             <h3 class="text-xl font-bold text-primary mb-4">Quantidades Consolidadas por Recurso (Cronograma da Semana)</h3>
              <div class="table-container"><table><thead><tr><th>Recurso</th><th class="text-right">Total Planejado</th><th class="text-right">Total Realizado</th><th class="text-right">Total Restante</th><th class="text-right">% Progresso</th></tr></thead><tbody>${resourcesHtml}</tbody></table></div>
         </div>
         ${renderGenuineValuesCard(groupId)}
-        <div class="card">
+        <div class="card p-6 bg-secondary">
             <h3 class="text-xl font-bold text-primary mb-4">Atividades no Grupo</h3>
             <div class="table-container"><table><thead><tr><th>Código</th><th>Nome</th><th>Status</th><th class="text-right">Qtd. Planejada</th><th>Início</th><th>Término</th></tr></thead><tbody>
                   ${tasksInGroup

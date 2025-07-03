@@ -5,6 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>6-Week Look Ahead | ChronoFlow</title>
     <link rel="icon" type="image/png" href="logo.png" />
+    <!-- SCRIPT DE BLOQUEIO DE RENDERIZAÇÃO PARA O TEMA -->
+    <script>
+      (function () {
+        try {
+          var theme = localStorage.getItem("theme");
+          if (theme === "dark") {
+            document.documentElement.classList.add("dark");
+          }
+        } catch (e) {
+          /* Ignorar erros de acesso ao localStorage */
+        }
+      })();
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link
       href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.css"
@@ -31,16 +44,37 @@
                 proativo.
               </p>
             </div>
-            <div
-              id="filter-controls"
-              class="grid grid-cols-2 gap-2 w-full lg:flex lg:w-auto"
-            >
-              <button class="filter-btn active" data-filter="all">Todos</button>
-              <button class="filter-btn" data-filter="start">Início</button>
-              <button class="filter-btn" data-filter="end">Fim</button>
-              <button class="filter-btn" data-filter="ongoing">
-                Andamento
-              </button>
+            <div class="flex flex-col items-center gap-2 w-full lg:w-auto">
+              <div
+                id="filter-controls"
+                class="grid grid-cols-3 gap-2 w-full lg:flex lg:w-auto"
+              >
+                <!-- Static Skeleton for Filters -->
+                <div
+                  class="skeleton"
+                  style="height: 38px; width: 80px; border-radius: 9999px"
+                ></div>
+                <div
+                  class="skeleton"
+                  style="height: 38px; width: 80px; border-radius: 9999px"
+                ></div>
+                <div
+                  class="skeleton"
+                  style="height: 38px; width: 80px; border-radius: 9999px"
+                ></div>
+                <div
+                  class="skeleton"
+                  style="height: 38px; width: 100px; border-radius: 9999px"
+                ></div>
+                <div
+                  class="skeleton col-span-2"
+                  style="height: 38px; width: 180px; border-radius: 9999px"
+                ></div>
+              </div>
+              <div
+                id="restriction-filter-controls"
+                class="hidden w-full grid grid-cols-3 sm:flex sm:flex-wrap sm:justify-center gap-2 pt-3 border-t border-border-primary"
+              ></div>
             </div>
           </div>
         </div>
@@ -62,7 +96,104 @@
               ></path>
             </svg>
           </button>
-          <div id="dashboard-output"></div>
+          <div id="dashboard-output">
+            <!-- Static Skeleton for Week Card -->
+            <div
+              class="card p-4 md:p-8 bg-secondary"
+              aria-live="polite"
+              aria-busy="true"
+            >
+              <div class="sr-only">Carregando dados da semana.</div>
+              <div
+                class="week-card-header flex flex-col items-center md:items-start text-center md:text-left md:flex-row md:items-center justify-between border-b-2 border-border-accent pb-3 mb-3 md:border-b md:border-border-primary"
+              >
+                <div>
+                  <div
+                    class="skeleton skeleton-title"
+                    style="width: 250px; height: 1.75rem"
+                  ></div>
+                  <div
+                    class="skeleton skeleton-text mt-2"
+                    style="width: 200px"
+                  ></div>
+                </div>
+                <div
+                  class="skeleton"
+                  style="width: 120px; height: 38px; border-radius: 0.5rem"
+                ></div>
+              </div>
+              <div class="mt-4 space-y-4">
+                <div class="wbs-group">
+                  <div class="wbs-title">
+                    <div
+                      class="skeleton skeleton-text"
+                      style="width: 60%; height: 1.125rem"
+                    ></div>
+                    <div
+                      class="skeleton"
+                      style="width: 20px; height: 20px"
+                    ></div>
+                  </div>
+                  <div class="wbs-content" style="max-height: 500px">
+                    <div class="item-list">
+                      <div class="item-entry">
+                        <div class="flex justify-between items-center">
+                          <div
+                            class="skeleton skeleton-text"
+                            style="width: 70%; height: 1rem"
+                          ></div>
+                          <div
+                            class="skeleton"
+                            style="
+                              width: 50px;
+                              height: 1rem;
+                              border-radius: 9999px;
+                            "
+                          ></div>
+                        </div>
+                        <div
+                          class="skeleton skeleton-text mt-2"
+                          style="width: 30%; height: 0.875rem"
+                        ></div>
+                      </div>
+                      <div class="item-entry">
+                        <div class="flex justify-between items-center">
+                          <div
+                            class="skeleton skeleton-text"
+                            style="width: 70%; height: 1rem"
+                          ></div>
+                          <div
+                            class="skeleton"
+                            style="
+                              width: 50px;
+                              height: 1rem;
+                              border-radius: 9999px;
+                            "
+                          ></div>
+                        </div>
+                        <div
+                          class="skeleton skeleton-text mt-2"
+                          style="width: 30%; height: 0.875rem"
+                        ></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="wbs-group">
+                  <div class="wbs-title">
+                    <div
+                      class="skeleton skeleton-text"
+                      style="width: 45%; height: 1.125rem"
+                    ></div>
+                    <div
+                      class="skeleton"
+                      style="width: 20px; height: 20px"
+                    ></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
           <button id="next-btn" class="nav-button next-btn">
             <svg
               class="w-4 h-4 md:w-6 md:h-6"
@@ -80,7 +211,15 @@
             </svg>
           </button>
         </div>
-        <div id="week-indicators" class="week-indicators"></div>
+        <div id="week-indicators" class="week-indicators">
+          <!-- Static Skeleton for Indicators -->
+          <div class="skeleton indicator-dot"></div>
+          <div class="skeleton indicator-dot"></div>
+          <div class="skeleton indicator-dot"></div>
+          <div class="skeleton indicator-dot"></div>
+          <div class="skeleton indicator-dot"></div>
+          <div class="skeleton indicator-dot"></div>
+        </div>
       </div>
     </div>
 

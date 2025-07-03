@@ -222,7 +222,6 @@ async function renderGroupEditForm(groupName = null) {
       g.taskCodes.forEach((code) => usedTaskCodes.add(code));
     }
   });
-  const selectEl = document.getElementById("activity-group-select");
   const allTasks = (await getProjectBase())?.TASK?.rows || [];
   const availableTasks = allTasks.filter(
     (task) => !usedTaskCodes.has(task.task_code)
@@ -291,7 +290,13 @@ async function renderCustomValuesTable() {
     tableHtml += `<tr><td colspan="4" class="text-center text-tertiary py-6">Nenhum valor personalizado definido.</td></tr>`;
   }
   tableHtml += `</tbody></table></div>`;
-  modalBody.innerHTML = tableHtml;
+
+  const container = document.getElementById("custom-values-table-wrapper");
+  if (container) {
+    container.innerHTML = tableHtml;
+  } else {
+    modalBody.innerHTML = tableHtml; // Fallback
+  }
 
   modalBody.addEventListener("click", (e) => {
     const editBtn = e.target.closest(".edit-custom-value-btn");
@@ -467,6 +472,201 @@ async function deleteCustomValue(id) {
       utils.showToast(`Erro ao excluir: ${error.message}`, "error");
     }
   }
+}
+
+async function handleDownloadTemplate() {
+  const btn = document.getElementById("download-template-btn");
+  if (!btn) return;
+  const originalContent = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = "Gerando...";
+
+  try {
+    const [project, mapping, savedValues] = await Promise.all([
+      getProjectBase(),
+      storage.getData(storage.APP_KEYS.ACTIVITY_MAPPING_KEY),
+      storage.getData(storage.APP_KEYS.CUSTOM_VALUES_KEY),
+    ]);
+
+    const filterSelect = document.getElementById(
+      "custom-values-filter-select"
+    )?.tomselect;
+    const selectedIds = filterSelect ? filterSelect.getValue() : [];
+    const customValuesMap = new Map(savedValues.map((v) => [v.id, v]));
+
+    // Create a set of all task codes that are part of any group
+    const groupedTaskCodes = new Set(mapping.flatMap((g) => g.taskCodes));
+
+    // Get all possible items (tasks and groups) that could be exported. The name here is for the filter dropdown.
+    const allPossibleItems = [
+      ...(project?.TASK?.rows || []).map((t) => ({
+        id: t.task_code,
+        name: `${t.task_code} - ${t.task_name}`,
+      })),
+      ...mapping.map((g) => ({
+        id: `group::${g.groupName}`,
+        name: `[Grupo] ${g.groupName}`,
+      })),
+    ];
+
+    // Determine the initial set of items to consider, based on the filter
+    let itemsToConsider;
+    if (selectedIds.length > 0) {
+      const selectedIdsSet = new Set(selectedIds);
+      itemsToConsider = allPossibleItems.filter((item) =>
+        selectedIdsSet.has(item.id)
+      );
+    } else {
+      itemsToConsider = allPossibleItems;
+    }
+
+    // Now, filter out individual tasks that are part of groups
+    const finalItemsForSheet = itemsToConsider.filter((item) => {
+      const isGroup = item.id.startsWith("group::");
+      return isGroup || !groupedTaskCodes.has(item.id);
+    });
+
+    if (finalItemsForSheet.length === 0) {
+      utils.showToast(
+        "Nenhum item para exportar com os filtros atuais.",
+        "info"
+      );
+      return;
+    }
+
+    finalItemsForSheet.sort((a, b) => a.name.localeCompare(b.name));
+
+    const projectTaskMap = new Map(
+      (project?.TASK?.rows || []).map((t) => [t.task_code, t.task_name])
+    );
+
+    const dataForSheet = finalItemsForSheet.map((item) => {
+      const values = customValuesMap.get(item.id);
+
+      let cleanName = item.name; // Default to existing name
+      if (item.id.startsWith("group::")) {
+        cleanName = item.name.replace("[Grupo] ", "");
+      } else {
+        // It's a task. Look it up in the map.
+        const taskName = projectTaskMap.get(item.id);
+        if (taskName) {
+          cleanName = taskName;
+        }
+      }
+
+      return {
+        ID: item.id,
+        Nome: cleanName,
+        Previsto: values?.planned ?? "",
+        Realizado: values?.actual ?? "",
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(dataForSheet);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Valores Personalizados");
+
+    worksheet["!cols"] = [{ wch: 20 }, { wch: 60 }, { wch: 15 }, { wch: 15 }];
+
+    XLSX.writeFile(workbook, "ChronoFlow_Valores_Personalizados.xlsx");
+    utils.showToast("Download do modelo iniciado!", "success");
+  } catch (error) {
+    console.error("Erro ao gerar template:", error);
+    utils.showToast(`Erro ao gerar modelo: ${error.message}`, "error");
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalContent;
+  }
+}
+
+async function handleImportSpreadsheet(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const label = event.target.closest("label");
+  const originalContent = label ? label.innerHTML : "Importar Planilha";
+  if (label) label.innerHTML = "Processando...";
+
+  utils.showToast("Processando planilha...", "info");
+
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, { type: "array" });
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const importedData = XLSX.utils.sheet_to_json(worksheet);
+
+      if (
+        importedData.length === 0 ||
+        !importedData[0].hasOwnProperty("ID") ||
+        !importedData[0].hasOwnProperty("Previsto") ||
+        !importedData[0].hasOwnProperty("Realizado")
+      ) {
+        throw new Error(
+          'Planilha inválida. Verifique se as colunas "ID", "Previsto" e "Realizado" existem.'
+        );
+      }
+
+      const currentValues = await storage.getData(
+        storage.APP_KEYS.CUSTOM_VALUES_KEY
+      );
+      const valuesMap = new Map(currentValues.map((v) => [v.id, v]));
+
+      let updatedCount = 0;
+      let newCount = 0;
+
+      importedData.forEach((row) => {
+        const id = row["ID"];
+        if (!id) return;
+
+        const planned =
+          row["Previsto"] !== undefined &&
+          row["Previsto"] !== null &&
+          row["Previsto"] !== ""
+            ? parseFloat(row["Previsto"])
+            : null;
+        const actual =
+          row["Realizado"] !== undefined &&
+          row["Realizado"] !== null &&
+          row["Realizado"] !== ""
+            ? parseFloat(row["Realizado"])
+            : null;
+
+        if (planned === null && actual === null) {
+          if (valuesMap.has(id)) {
+            valuesMap.delete(id);
+          }
+          return;
+        }
+
+        if (valuesMap.has(id)) {
+          updatedCount++;
+        } else {
+          newCount++;
+        }
+
+        valuesMap.set(id, { id, planned, actual });
+      });
+
+      const newValues = Array.from(valuesMap.values());
+      await storage.saveData(storage.APP_KEYS.CUSTOM_VALUES_KEY, newValues);
+
+      utils.showToast(
+        `${updatedCount} valore(s) atualizado(s) e ${newCount} novo(s) inserido(s).`,
+        "success"
+      );
+      await renderCustomValuesTable();
+    } catch (error) {
+      console.error("Erro ao importar planilha:", error);
+      utils.showToast(`Erro na importação: ${error.message}`, "error");
+    } finally {
+      event.target.value = "";
+      if (label) label.innerHTML = originalContent;
+    }
+  };
+  reader.readAsArrayBuffer(file);
 }
 
 async function processAndSaveWeeksFile(file) {
@@ -725,7 +925,41 @@ const CONFIG_MODULES = {
       icon: `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" /></svg>`,
       tooltip: "Adicionar Novo Valor",
     },
-    setup: () => "",
+    setup: () => `
+            <div class="space-y-6">
+                <div class="p-4 bg-tertiary rounded-lg border border-border-primary">
+                    <h4 class="font-semibold text-primary mb-2">Importar & Exportar via Excel</h4>
+                    <p class="text-sm text-secondary mb-4">Otimize a atualização de dados em massa. Itens que pertencem a grupos não serão exportados individualmente.</p>
+                    
+                    <div class="space-y-3">
+                        <div>
+                            <label for="custom-values-filter-select" class="form-label">Filtrar itens para exportação (opcional):</label>
+                            <div id="custom-values-filter-skeleton">
+                                <div class="skeleton skeleton-block" style="height: 46px; border-radius: 0.5rem;"></div>
+                            </div>
+                            <div id="custom-values-filter-wrapper" class="hidden">
+                                <select id="custom-values-filter-select" multiple placeholder="Deixe em branco para exportar todos os itens..."></select>
+                            </div>
+                        </div>
+                        <div class="flex gap-2 justify-end pt-2">
+                            <button id="download-template-btn" class="px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm font-semibold flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                                Baixar Modelo
+                            </button>
+                            <label class="cursor-pointer px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-semibold flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                                Importar Planilha
+                                <input type="file" id="import-spreadsheet-input" class="sr-only" accept=".xlsx, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" />
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="custom-values-table-wrapper" class="pt-4 border-t border-border-primary">
+                     <!-- Table will be rendered here -->
+                </div>
+            </div>
+        `,
     save: saveCustomValue,
   },
   backup: {
@@ -911,6 +1145,62 @@ const CONFIG_MODULES = {
       await renderRestrictionsTable();
     } else if (module === CONFIG_MODULES["custom-values"]) {
       await renderCustomValuesTable();
+
+      // Populate the filter dropdown (asynchronously)
+      const filterSelectEl = document.getElementById(
+        "custom-values-filter-select"
+      );
+      const skeletonEl = document.getElementById(
+        "custom-values-filter-skeleton"
+      );
+      const wrapperEl = document.getElementById("custom-values-filter-wrapper");
+
+      if (filterSelectEl && skeletonEl && wrapperEl) {
+        // Data fetching and processing
+        const project = await getProjectBase();
+        const mapping = await storage.getData(
+          storage.APP_KEYS.ACTIVITY_MAPPING_KEY
+        );
+
+        // 1. Create a set of all task codes that are part of any group
+        const groupedTaskCodes = new Set(mapping.flatMap((g) => g.taskCodes));
+
+        // 2. Get all task options, then filter out the ones that are in groups
+        const ungroupedTaskOptions = (project?.TASK?.rows || [])
+          .filter((t) => !groupedTaskCodes.has(t.task_code))
+          .map((t) => ({
+            value: t.task_code,
+            text: `${t.task_code} - ${t.task_name}`,
+          }));
+
+        // 3. Get all group options
+        const groupOptions = mapping.map((g) => ({
+          value: `group::${g.groupName}`,
+          text: `[Grupo] ${g.groupName}`,
+        }));
+
+        // 4. Combine and sort
+        const allItems = [...ungroupedTaskOptions, ...groupOptions].sort(
+          (a, b) => a.text.localeCompare(b.text)
+        );
+
+        const tomSelect = new TomSelect(filterSelectEl, {
+          options: allItems,
+          plugins: ["remove_button"],
+        });
+        activeTomSelects.push(tomSelect);
+
+        // 5. Hide skeleton and show select input
+        skeletonEl.classList.add("hidden");
+        wrapperEl.classList.remove("hidden");
+      }
+
+      document
+        .getElementById("download-template-btn")
+        ?.addEventListener("click", handleDownloadTemplate);
+      document
+        .getElementById("import-spreadsheet-input")
+        ?.addEventListener("change", handleImportSpreadsheet);
     } else if (module === CONFIG_MODULES.backup) {
       document.getElementById("modal-footer").style.display = "none";
 
@@ -1110,7 +1400,7 @@ async function renderRestrictionsTable() {
 
   restrictionsList.sort((a, b) => a.desc.localeCompare(b.desc));
 
-  let tableHtml = `<div class="table-container"><table><thead><tr><th>Descrição</th><th>Status</th><th>Nº de Vínculos</th><th class="text-right">Ações</th></tr></thead><tbody>`;
+  let tableHtml = `<div class="table-container"><table><thead><tr><th>Descrição</th><th>Categoria</th><th>Status</th><th>Nº de Vínculos</th><th class="text-right">Ações</th></tr></thead><tbody>`;
   if (restrictionsList.length > 0) {
     restrictionsList.forEach((restr) => {
       const linkCount = linksByRestrictionId[restr.id]?.length || 0;
@@ -1118,6 +1408,11 @@ async function renderRestrictionsTable() {
       tableHtml += `
                       <tr>
                           <td class="font-semibold">${restr.desc}</td>
+                          <td>${
+                            restr.category
+                              ? `<span class="restriction-category-badge">${restr.category}</span>`
+                              : '<span class="text-quaternary">N/A</span>'
+                          }</td>
                           <td><span class="badge ${
                             restr.status === "pending"
                               ? "status-pending-restr"
@@ -1141,7 +1436,7 @@ async function renderRestrictionsTable() {
                       </tr>`;
     });
   } else {
-    tableHtml += `<tr><td colspan="4" class="text-center text-tertiary py-6">Nenhuma restrição criada.</td></tr>`;
+    tableHtml += `<tr><td colspan="5" class="text-center text-tertiary py-6">Nenhuma restrição criada.</td></tr>`;
   }
   tableHtml += `</tbody></table></div>`;
   modalBody.innerHTML = tableHtml;
@@ -1170,7 +1465,7 @@ async function renderRestrictionEditForm(restrictionId = null) {
 
   const restriction = restrictionId
     ? restrictionsList.find((r) => r.id === restrictionId)
-    : { desc: "", resp: "", due: "", status: "pending" };
+    : { desc: "", resp: "", due: "", status: "pending", category: null };
   currentEditingId = restrictionId;
 
   const linkedItemIds = restrictionId
@@ -1184,6 +1479,15 @@ async function renderRestrictionEditForm(restrictionId = null) {
     : "Criando uma nova restrição.";
   modalSaveBtn.style.display = "inline-flex";
   modalHeaderActions.innerHTML = "";
+
+  const mCategories = [
+    "Método",
+    "Máquina",
+    "Mão de Obra",
+    "Material",
+    "Medição",
+    "Meio Ambiente",
+  ];
 
   modalBody.innerHTML = `
               <div class="space-y-4">
@@ -1216,6 +1520,22 @@ async function renderRestrictionEditForm(restrictionId = null) {
                           </select>
                       </div>
                   </div>
+                   <div>
+                        <label class="form-label font-bold text-primary">Causa Raiz (6M)</label>
+                        <div id="m-category-selector" class="flex flex-wrap gap-2 mt-1">
+                           ${mCategories
+                             .map(
+                               (cat) =>
+                                 `<button type="button" class="m-category-btn ${
+                                   restriction.category === cat ? "active" : ""
+                                 }" data-category="${cat}">${cat}</button>`
+                             )
+                             .join("")}
+                        </div>
+                        <input type="hidden" id="restr-category" name="restr-category" value="${
+                          restriction.category || ""
+                        }">
+                    </div>
                   <div>
                       <label for="restriction-links-select" class="font-semibold text-primary mt-2 block">Vincular a Atividades/Grupos:</label>
                       <select id="restriction-links-select" multiple></select>
@@ -1243,6 +1563,28 @@ async function renderRestrictionEditForm(restrictionId = null) {
   tomSelect.setValue(linkedItemIds);
   activeTomSelects.push(tomSelect);
 
+  document
+    .getElementById("m-category-selector")
+    ?.addEventListener("click", (e) => {
+      const btn = e.target.closest(".m-category-btn");
+      if (!btn) return;
+
+      const categoryInput = document.getElementById("restr-category");
+      const isAlreadyActive = btn.classList.contains("active");
+
+      btn.parentElement
+        .querySelectorAll(".active")
+        .forEach((b) => b.classList.remove("active"));
+
+      if (isAlreadyActive) {
+        categoryInput.value = "";
+      } else {
+        btn.classList.add("active");
+        categoryInput.value = btn.dataset.category;
+      }
+      modalSaveBtn.disabled = false;
+    });
+
   activateChangeDetection();
 }
 
@@ -1267,6 +1609,7 @@ async function saveRestriction() {
       resp: document.getElementById("restriction-resp-input").value,
       due: document.getElementById("restriction-due-input").value,
       status: document.getElementById("restriction-status-select").value,
+      category: document.getElementById("restr-category").value || null,
     };
 
     if (currentEditingId) {

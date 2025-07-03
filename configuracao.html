@@ -5,6 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Configurações | ChronoFlow</title>
     <link rel="icon" type="image/png" href="logo.png" />
+    <!-- SCRIPT DE BLOQUEIO DE RENDERIZAÇÃO PARA O TEMA -->
+    <script>
+      (function () {
+        try {
+          var theme = localStorage.getItem("theme");
+          if (theme === "dark") {
+            document.documentElement.classList.add("dark");
+          }
+        } catch (e) {
+          /* Ignorar erros de acesso ao localStorage */
+        }
+      })();
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <link

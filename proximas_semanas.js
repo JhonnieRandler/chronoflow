@@ -20,6 +20,9 @@ const prevBtn = document.getElementById("prev-btn");
 const nextBtn = document.getElementById("next-btn");
 const indicatorsContainer = document.getElementById("week-indicators");
 const filterControls = document.getElementById("filter-controls");
+const restrictionFilterControls = document.getElementById(
+  "restriction-filter-controls"
+);
 
 const modal = document.getElementById("restriction-modal");
 const modalContent = modal.querySelector(".modal-content");
@@ -36,10 +39,12 @@ let fullTaskList = [],
   activityStageMap = new Map(),
   customValuesData = new Map(),
   restrictionsList = [],
-  restrictionLinks = [];
+  restrictionLinks = [],
+  itemRestrictionInfoMap = new Map();
 let currentWeekIndex = 0;
 let groupedByWeek = {};
 let currentFilter = "all";
+let currentRestrictionFilter = "all";
 let currentOpenItemId = null;
 let projectName = "Projeto";
 let activeTomSelect = null;
@@ -74,14 +79,20 @@ function uuidv4() {
 
     if (!projectBase || Object.keys(projectBase).length === 0) {
       dashboardOutput.innerHTML = `<div class="message-box col-span-full">Nenhum projeto base encontrado. Faça o upload de um arquivo .xer.</div>`;
+      filterControls.innerHTML = "";
+      indicatorsContainer.innerHTML = "";
       return;
     }
     if (Object.keys(projectVersions).length === 0) {
       dashboardOutput.innerHTML = `<div class="message-box col-span-full">Nenhuma versão de projeto encontrada. Faça o upload de um arquivo .xer.</div>`;
+      filterControls.innerHTML = "";
+      indicatorsContainer.innerHTML = "";
       return;
     }
     if (weeksData.length === 0) {
       dashboardOutput.innerHTML = `<div class="message-box col-span-full">Nenhum mapeamento de semanas encontrado.</div>`;
+      filterControls.innerHTML = "";
+      indicatorsContainer.innerHTML = "";
       return;
     }
 
@@ -93,9 +104,36 @@ function uuidv4() {
     wbsHierarchy = projectBase.WBS_HIERARCHY?.rows || [];
     wbsMap = new Map(wbsHierarchy.map((w) => [w.stable_wbs_id, w]));
 
+    // Pre-process restriction information for performance
+    restrictionLinks.forEach((link) => {
+      const restriction = restrictionsList.find(
+        (r) => r.id === link.restrictionId
+      );
+      if (!restriction) return;
+
+      if (!itemRestrictionInfoMap.has(link.itemId)) {
+        itemRestrictionInfoMap.set(link.itemId, {
+          hasPending: false,
+          pendingCount: 0,
+          pendingCategories: new Set(),
+        });
+      }
+
+      const info = itemRestrictionInfoMap.get(link.itemId);
+      if (restriction.status === "pending") {
+        info.hasPending = true;
+        info.pendingCount++;
+        if (restriction.category) {
+          info.pendingCategories.add(restriction.category);
+        }
+      }
+    });
+
     const currentWeek = utils.getWeekForDate(new Date(), weeksData);
     if (currentWeek === null) {
       dashboardOutput.innerHTML = `<div class="message-box">Data atual fora do mapeamento.</div>`;
+      filterControls.innerHTML = "";
+      indicatorsContainer.innerHTML = "";
       return;
     }
 
@@ -127,8 +165,10 @@ function uuidv4() {
       });
     });
 
-    await renderCurrentWeekView();
+    renderStaticControls();
     setupNavigation();
+    await renderCurrentWeekView();
+    setupEventListeners();
     setupModal();
   } catch (e) {
     console.error(e);
@@ -258,6 +298,24 @@ function buildGroupedTreeRecursive(item, levels, currentTree) {
 }
 
 function itemMatchesFilter(item) {
+  const itemId =
+    item.type === "group"
+      ? `group::${item.data.groupName}`
+      : item.relatedTasks[0].task_code;
+
+  if (currentFilter === "restrictions") {
+    const restrictionInfo = itemRestrictionInfoMap.get(itemId);
+    if (!restrictionInfo || !restrictionInfo.hasPending) {
+      return false; // Must have at least one pending restriction
+    }
+    if (currentRestrictionFilter === "all") {
+      return true; // Has restrictions, and we want all with restrictions
+    }
+    // Check if any of the item's restrictions match the category filter
+    return restrictionInfo.pendingCategories.has(currentRestrictionFilter);
+  }
+
+  // --- Original filter logic ---
   if (currentFilter === "all") return true;
   if (item.type === "group") {
     return item.relatedTasks.some((task) => {
@@ -275,37 +333,109 @@ function itemMatchesFilter(item) {
   return false;
 }
 
-function renderWeekSkeleton() {
-  dashboardOutput.innerHTML = `
-        <div class="card p-4 md:p-8 bg-secondary" aria-live="polite" aria-busy="true">
-             <div class="sr-only">Carregando dados da semana.</div>
-            <div class="week-card-header">
-                <div>
-                    <div class="skeleton skeleton-title" style="width: 250px;"></div>
-                    <div class="skeleton skeleton-text" style="width: 200px;"></div>
-                </div>
-                <div class="skeleton skeleton-block" style="width: 120px; height: 38px;"></div>
-            </div>
-            <div class="mt-4">
-                <div class="skeleton skeleton-block wbs-title" style="height: 38px;"></div>
-                <div class="wbs-group">
-                    <div class="skeleton skeleton-block wbs-title mt-4" style="height: 38px;"></div>
-                    <div class="skeleton skeleton-block mt-2" style="height: 60px;"></div>
-                    <div class="skeleton skeleton-block mt-2" style="height: 60px;"></div>
-                </div>
-                <div class="skeleton skeleton-block wbs-title mt-4" style="height: 38px;"></div>
-            </div>
-        </div>`;
-}
-
 async function renderCurrentWeekView() {
   const weekNumber = upcomingWeeks[currentWeekIndex];
   if (!groupedByWeek[weekNumber]) {
-    renderWeekSkeleton();
+    // Show skeleton on the card itself before processing
+    dashboardOutput.innerHTML = `
+        <div class="card p-4 md:p-8 bg-secondary" aria-live="polite" aria-busy="true">
+            <div class="sr-only">Carregando dados da semana.</div>
+             <div class="week-card-header flex flex-col items-center md:items-start text-center md:text-left md:flex-row md:items-center justify-between border-b-2 border-border-accent pb-3 mb-3 md:border-b md:border-border-primary">
+                <div>
+                    <div class="skeleton skeleton-title" style="width: 250px; height: 1.75rem;"></div>
+                    <div class="skeleton skeleton-text mt-2" style="width: 200px;"></div>
+                </div>
+                <div class="skeleton" style="width: 120px; height: 38px; border-radius: 0.5rem;"></div>
+            </div>
+            <p class="text-center text-tertiary italic p-8">Processando dados da semana...</p>
+        </div>`;
     await processAndCacheWeekData(weekNumber);
   }
 
+  // --- Dynamic Filter Logic ---
   const weekTree = { children: groupedByWeek[weekNumber] || {} };
+  let weekHasPendingRestrictions = false;
+  const availableRestrictionCategories = new Set();
+
+  function traverseAndCheckRestrictions(node) {
+    if (node.items) {
+      for (const item of node.items.values()) {
+        const itemId =
+          item.type === "group"
+            ? `group::${item.data.groupName}`
+            : item.relatedTasks[0].task_code;
+        const restrictionInfo = itemRestrictionInfoMap.get(itemId);
+        if (restrictionInfo?.hasPending) {
+          weekHasPendingRestrictions = true;
+          restrictionInfo.pendingCategories.forEach((cat) =>
+            availableRestrictionCategories.add(cat)
+          );
+        }
+      }
+    }
+    if (node.children) {
+      for (const childKey in node.children) {
+        traverseAndCheckRestrictions(node.children[childKey]);
+      }
+    }
+  }
+  traverseAndCheckRestrictions(weekTree);
+
+  const restrictionsFilterBtn = document.querySelector(
+    '.filter-btn[data-filter="restrictions"]'
+  );
+  if (restrictionsFilterBtn) {
+    restrictionsFilterBtn.style.display = weekHasPendingRestrictions
+      ? "block"
+      : "none";
+  }
+
+  if (!weekHasPendingRestrictions && currentFilter === "restrictions") {
+    currentFilter = "all"; // Reset to default filter
+    document.querySelector(".filter-btn.active")?.classList.remove("active");
+    document
+      .querySelector('.filter-btn[data-filter="all"]')
+      ?.classList.add("active");
+  }
+
+  // Centralized logic for sub-filter visibility.
+  // This explicitly manages layout classes to prevent CSS specificity conflicts on larger screens,
+  // where a responsive class like `sm:flex` could override the `hidden` class.
+  if (currentFilter === "restrictions") {
+    restrictionFilterControls.classList.remove("hidden");
+    restrictionFilterControls.classList.add("grid", "sm:flex");
+  } else {
+    restrictionFilterControls.classList.add("hidden");
+    restrictionFilterControls.classList.remove("grid", "sm:flex");
+  }
+
+  const subFilterButtons =
+    restrictionFilterControls.querySelectorAll(".sub-filter-btn");
+  subFilterButtons.forEach((btn) => {
+    const category = btn.dataset.category;
+    if (category === "all") {
+      btn.style.display = "block";
+    } else {
+      btn.style.display = availableRestrictionCategories.has(category)
+        ? "block"
+        : "none";
+    }
+  });
+
+  if (
+    !availableRestrictionCategories.has(currentRestrictionFilter) &&
+    currentRestrictionFilter !== "all"
+  ) {
+    currentRestrictionFilter = "all";
+    restrictionFilterControls
+      .querySelector(".sub-filter-btn.active")
+      ?.classList.remove("active");
+    restrictionFilterControls
+      .querySelector('.sub-filter-btn[data-category="all"]')
+      ?.classList.add("active");
+  }
+
+  // --- Rendering Logic ---
   const weekInfo = weeksData.find((w) => parseInt(w.Semana, 10) === weekNumber);
   const dateRange = weekInfo
     ? `${utils.formatBrazilianDate(
@@ -314,15 +444,6 @@ async function renderCurrentWeekView() {
     : "";
 
   let hasContent = false;
-  const linkedRestrictionIds = new Set(restrictionLinks.map((l) => l.itemId));
-  const pendingRestrictionsCount = restrictionLinks.reduce((acc, link) => {
-    const restr = restrictionsList.find((r) => r.id === link.restrictionId);
-    if (restr && restr.status === "pending") {
-      if (!acc[link.itemId]) acc[link.itemId] = 0;
-      acc[link.itemId]++;
-    }
-    return acc;
-  }, {});
 
   const renderNode = (node) => {
     let html = "";
@@ -364,30 +485,37 @@ async function renderCurrentWeekView() {
           const itemName =
             item.type === "group"
               ? item.data.groupName
+              : item.relatedTasks[0].task_name;
+          const itemTitle =
+            item.type === "group"
+              ? item.data.groupName
               : `${item.relatedTasks[0].task_code}: ${item.relatedTasks[0].task_name}`;
 
-          const pendingCount = pendingRestrictionsCount[itemId] || 0;
+          const pendingCount =
+            itemRestrictionInfoMap.get(itemId)?.pendingCount || 0;
           let restrictionBadge =
             pendingCount > 0
               ? `<span class="restriction-badge" title="${pendingCount} restrições pendentes">🚩 ${pendingCount}</span>`
               : "";
 
           let itemEntryClass = "item-entry";
+          const customValue = customValuesData.get(itemId);
+          if (
+            customValue &&
+            (customValue.planned !== null || customValue.actual !== null)
+          ) {
+            const remaining =
+              (customValue.planned || 0) - (customValue.actual || 0);
+            tooltipHtml = `data-tooltip="Saldo Topográfico: ${utils.formatNumberBR(
+              remaining
+            )}"`;
+            itemEntryClass += " tooltip has-tooltip";
+          }
 
           if (item.type === "group") {
             const { groupName, totalStages } = activityStageMap.get(
               item.relatedTasks[0].task_code
             );
-            const groupId = `group::${groupName}`;
-            const customValue = customValuesData.get(groupId);
-            if (customValue) {
-              const remaining =
-                (customValue.planned || 0) - (customValue.actual || 0);
-              tooltipHtml = `data-tooltip="Saldo Topográfico: ${utils.formatNumberBR(
-                remaining
-              )}"`;
-              itemEntryClass += " tooltip has-tooltip";
-            }
 
             const startsInWeek = item.relatedTasks.some((t) =>
               t.tag.includes("Início")
@@ -409,22 +537,12 @@ async function renderCurrentWeekView() {
             html += `<div role="button" tabindex="0" class="${itemEntryClass}" ${tooltipHtml} data-item-id="${itemId}" data-item-name="${itemName}"><div class="flex justify-between items-center"><p class="font-semibold text-primary">${groupName}</p><div>${restrictionBadge}${tagHtml}</div></div><p class="text-sm text-tertiary italic">${stageText} de ${totalStages}</p></div>`;
           } else {
             const task = item.relatedTasks[0];
-            const customValue = customValuesData.get(task.task_code);
-
-            if (customValue) {
-              const remaining =
-                (customValue.planned || 0) - (customValue.actual || 0);
-              tooltipHtml = `data-tooltip="Saldo Topográfico: ${utils.formatNumberBR(
-                remaining
-              )}"`;
-              itemEntryClass += " tooltip has-tooltip";
-            }
 
             if (task.tag.includes("Início"))
               tagHtml += `<span class="tag tag-start">Início</span>`;
             if (task.tag.includes("Fim"))
               tagHtml += `<span class="tag tag-end">Fim</span>`;
-            html += `<div role="button" tabindex="0" class="${itemEntryClass}" ${tooltipHtml} data-item-id="${itemId}" data-item-name="${itemName}"><div class="flex justify-between items-center"><p class="font-semibold text-primary">${task.task_code}</p><div>${restrictionBadge}${tagHtml}</div></div><p class="text-sm text-secondary">${task.task_name}</p></div>`;
+            html += `<div role="button" tabindex="0" class="${itemEntryClass}" ${tooltipHtml} data-item-id="${itemId}" data-item-name="${itemTitle}"><div class="flex justify-between items-center"><p class="font-semibold text-primary">${task.task_name}</p><div>${restrictionBadge}${tagHtml}</div></div><p class="text-sm text-secondary">${task.task_code}</p></div>`;
           }
         });
         html += "</div>";
@@ -436,8 +554,10 @@ async function renderCurrentWeekView() {
   };
 
   let weekContent = renderNode(weekTree);
+  const filterLabel =
+    filterControls.querySelector(".active")?.textContent.trim() || "Todos";
   if (!hasContent) {
-    weekContent = `<p class="text-lg text-tertiary italic py-20 text-center">Nenhuma atividade para o filtro "${currentFilter}" nesta semana.</p>`;
+    weekContent = `<p class="text-lg text-tertiary italic py-20 text-center">Nenhuma atividade para o filtro "${filterLabel}" nesta semana.</p>`;
   }
 
   dashboardOutput.innerHTML = `
@@ -488,6 +608,7 @@ function toggleWbsContent(titleButton) {
 
   if (isExpanded) {
     // COLLAPSING
+    content.style.overflow = "hidden"; // Set overflow to hidden to prevent tooltips from showing during collapse
     content.style.maxHeight = content.scrollHeight + "px";
     requestAnimationFrame(() => {
       titleButton.setAttribute("aria-expanded", "false");
@@ -538,33 +659,76 @@ function toggleAllWbs(event) {
   btn.textContent = isExpanding ? "Minimizar Tudo" : "Expandir Tudo";
 }
 
+async function expandAllWbs() {
+  const allTitleButtons = Array.from(
+    dashboardOutput.querySelectorAll(".wbs-title")
+  );
+  allTitleButtons.forEach((button) => {
+    const isCurrentlyExpanded = button.getAttribute("aria-expanded") === "true";
+    if (!isCurrentlyExpanded) {
+      toggleWbsContent(button);
+    }
+  });
+  const toggleAllBtn = document.getElementById("toggle-all-btn");
+  if (toggleAllBtn) {
+    toggleAllBtn.dataset.state = "expanded";
+    toggleAllBtn.textContent = "Minimizar Tudo";
+  }
+}
+
+function renderStaticControls() {
+  filterControls.innerHTML = `
+        <button class="filter-btn active" data-filter="all">Todos</button>
+        <button class="filter-btn" data-filter="start">Início</button>
+        <button class="filter-btn" data-filter="end">Fim</button>
+        <button class="filter-btn" data-filter="ongoing">Andamento</button>
+        <button class="filter-btn filter-btn-restrictions col-span-2" data-filter="restrictions" style="display: none;">
+            ⚠️ Com Restrições
+        </button>
+    `;
+
+  restrictionFilterControls.innerHTML = `
+        <button class="sub-filter-btn active" data-category="all" style="display: none;">Todas</button>
+        <button class="sub-filter-btn" data-category="Método" style="display: none;">Método</button>
+        <button class="sub-filter-btn" data-category="Máquina" style="display: none;">Máquina</button>
+        <button class="sub-filter-btn" data-category="Mão de Obra" style="display: none;">Mão de Obra</button>
+        <button class="sub-filter-btn" data-category="Material" style="display: none;">Material</button>
+        <button class="sub-filter-btn" data-category="Medição" style="display: none;">Medição</button>
+        <button class="sub-filter-btn" data-category="Meio Ambiente" style="display: none;">Meio Ambiente</button>
+    `;
+}
+
 function setupNavigation() {
-  prevBtn.setAttribute("aria-label", "Semana anterior");
-  nextBtn.setAttribute("aria-label", "Próxima semana");
-
-  prevBtn.addEventListener("click", () => {
-    if (currentWeekIndex > 0) {
-      currentWeekIndex--;
-      renderCurrentWeekView();
-    }
-  });
-  nextBtn.addEventListener("click", () => {
-    if (currentWeekIndex < upcomingWeeks.length - 1) {
-      currentWeekIndex++;
-      renderCurrentWeekView();
-    }
-  });
-
   indicatorsContainer.innerHTML = upcomingWeeks
     .map(
       (_, i) =>
         `<button class="indicator-dot" data-index="${i}" aria-label="Ir para semana ${upcomingWeeks[i]}"></button>`
     )
     .join("");
+  updateNavigation();
+}
+
+function setupEventListeners() {
+  prevBtn.setAttribute("aria-label", "Semana anterior");
+  nextBtn.setAttribute("aria-label", "Próxima semana");
+
+  prevBtn.addEventListener("click", async () => {
+    if (currentWeekIndex > 0) {
+      currentWeekIndex--;
+      await renderCurrentWeekView();
+    }
+  });
+  nextBtn.addEventListener("click", async () => {
+    if (currentWeekIndex < upcomingWeeks.length - 1) {
+      currentWeekIndex++;
+      await renderCurrentWeekView();
+    }
+  });
+
   indicatorsContainer.querySelectorAll(".indicator-dot").forEach((dot) => {
-    dot.addEventListener("click", () => {
+    dot.addEventListener("click", async () => {
       currentWeekIndex = parseInt(dot.dataset.index);
-      renderCurrentWeekView();
+      await renderCurrentWeekView();
     });
   });
 
@@ -603,19 +767,46 @@ function setupNavigation() {
       e.propertyName !== "max-height"
     )
       return;
+
+    // Check if another animation is cascading upwards
     const parent = content.parentElement.closest(
       ".wbs-content[aria-expanded='true']"
     );
-    if (parent) parent.style.maxHeight = parent.scrollHeight + "px";
-    if (content.style.maxHeight !== "0px") content.style.maxHeight = "none";
+    if (parent) {
+      parent.style.maxHeight = parent.scrollHeight + "px";
+    }
+
+    // When an element has finished expanding
+    if (content.style.maxHeight !== "0px") {
+      content.style.maxHeight = "none";
+      content.style.overflow = "visible"; // Allow tooltips to show
+    }
   });
 
-  filterControls.addEventListener("click", (e) => {
-    if (e.target.matches(".filter-btn")) {
+  filterControls.addEventListener("click", async (e) => {
+    const btn = e.target.closest(".filter-btn");
+    if (btn && !btn.classList.contains("active")) {
       filterControls.querySelector(".active").classList.remove("active");
-      e.target.classList.add("active");
-      currentFilter = e.target.dataset.filter;
-      renderCurrentWeekView();
+      btn.classList.add("active");
+      currentFilter = btn.dataset.filter;
+
+      await renderCurrentWeekView();
+      if (currentFilter !== "all") {
+        await expandAllWbs();
+      }
+    }
+  });
+
+  restrictionFilterControls.addEventListener("click", async (e) => {
+    const btn = e.target.closest(".sub-filter-btn");
+    if (btn && !btn.classList.contains("active")) {
+      restrictionFilterControls
+        .querySelector(".active")
+        .classList.remove("active");
+      btn.classList.add("active");
+      currentRestrictionFilter = btn.dataset.category;
+      await renderCurrentWeekView();
+      await expandAllWbs();
     }
   });
 }
@@ -691,7 +882,7 @@ function openRestrictionsModal(itemId, itemName) {
   modalContent.setAttribute("aria-labelledby", "modal-item-name");
   modal.classList.add("active");
 
-  renderModalContent();
+  renderDetailsCard();
 }
 
 function closeModal() {
@@ -707,9 +898,79 @@ function closeModal() {
   }
 }
 
-function renderModalContent() {
-  if (!currentOpenItemId) return;
+function findItemInCurrentWeekTree(itemId) {
+  const weekTree = {
+    children: groupedByWeek[upcomingWeeks[currentWeekIndex]] || {},
+    items: new Map(),
+  }; // Wrap it to have a common structure
 
+  function search(node) {
+    if (node.items) {
+      for (const item of node.items.values()) {
+        const currentItemId =
+          item.type === "group"
+            ? `group::${item.data.groupName}`
+            : item.relatedTasks[0].task_code;
+        if (currentItemId === itemId) {
+          return item;
+        }
+      }
+    }
+    if (node.children) {
+      for (const childKey in node.children) {
+        const result = search(node.children[childKey]);
+        if (result) return result;
+      }
+    }
+    return null;
+  }
+  return search(weekTree);
+}
+
+function renderDetailsCard() {
+  if (!currentOpenItemId) return;
+  // --- Data Gathering ---
+  const itemData = findItemInCurrentWeekTree(currentOpenItemId);
+
+  // Dates
+  const itemDates = (() => {
+    if (
+      !itemData ||
+      !itemData.relatedTasks ||
+      itemData.relatedTasks.length === 0
+    ) {
+      return { start: "N/A", end: "N/A" };
+    }
+    const dates = itemData.relatedTasks.map((task) => ({
+      start: new Date(
+        (task.act_start_date || task.restart_date).replace(" ", "T")
+      ),
+      end: new Date(
+        (task.reend_date || task.target_end_date).replace(" ", "T")
+      ),
+    }));
+    const minStart = new Date(Math.min(...dates.map((d) => d.start)));
+    const maxEnd = new Date(Math.max(...dates.map((d) => d.end)));
+    return {
+      start: utils.formatBrazilianDate(minStart),
+      end: utils.formatBrazilianDate(maxEnd),
+    };
+  })();
+
+  // Balance
+  const customValue = customValuesData.get(currentOpenItemId);
+  const balance = (() => {
+    if (
+      customValue &&
+      (customValue.planned !== null || customValue.actual !== null)
+    ) {
+      const remaining = (customValue.planned || 0) - (customValue.actual || 0);
+      return utils.formatNumberBR(remaining);
+    }
+    return null;
+  })();
+
+  // Restrictions
   const linkedIds = new Set(
     restrictionLinks
       .filter((l) => l.itemId === currentOpenItemId)
@@ -735,7 +996,14 @@ function renderModalContent() {
                   r.status
                 }" data-restr-id="${r.id}">
                     <div class="flex-grow">
-                        <p class="font-medium text-primary">${r.desc}</p>
+                        <div class="flex items-center gap-2 mb-1">
+                            ${
+                              r.category
+                                ? `<span class="restriction-category-badge">${r.category}</span>`
+                                : ""
+                            }
+                            <p class="font-medium text-primary">${r.desc}</p>
+                        </div>
                         <p class="text-sm text-tertiary mt-1">
                             <span class="font-semibold">Resp:</span> ${
                               r.resp
@@ -746,9 +1014,9 @@ function renderModalContent() {
                         </p>
                     </div>
                     <div class="restriction-actions">
-                        <button class="action-btn toggle-status-btn">
-                            ${r.status === "pending" ? "Resolver" : "Reabrir"}
-                        </button>
+                        <button class="action-btn toggle-status-btn">${
+                          r.status === "pending" ? "Resolver" : "Reabrir"
+                        }</button>
                         <button class="action-btn unlink-btn text-yellow-600">Desvincular</button>
                     </div>
                 </div>`
@@ -756,6 +1024,77 @@ function renderModalContent() {
       .join("");
   };
 
+  // --- HTML Rendering ---
+  let infoCardHtml = `
+    <div class="item-info-card">
+        <h3 class="text-lg font-semibold text-primary mb-3">Informações Gerais</h3>
+        <div class="info-grid">
+            <div class="info-grid-item">
+                <span class="info-item-label">Início</span>
+                <span class="info-item-value">${itemDates.start}</span>
+            </div>
+            <div class="info-grid-item">
+                <span class="info-item-label">Término</span>
+                <span class="info-item-value">${itemDates.end}</span>
+            </div>
+            ${
+              balance !== null
+                ? `
+            <div class="info-grid-item">
+                <span class="info-item-label">Saldo Topográfico</span>
+                <span class="info-item-value">${balance}</span>
+            </div>`
+                : ""
+            }
+        </div>
+    </div>`;
+
+  modalBody.innerHTML = `
+        ${infoCardHtml}
+        <div class="mt-6">
+            <h3 class="text-lg font-semibold text-primary mb-2">Restrições Vinculadas</h3>
+            <div class="space-y-4">
+                 <div>
+                    <h4 class="font-medium text-secondary mb-2">Pendentes</h4>
+                    <div id="pending-list" class="space-y-2">${renderList(
+                      pending
+                    )}</div>
+                </div>
+                 <div>
+                    <h4 class="font-medium text-secondary mb-2">Resolvidas</h4>
+                    <div id="resolved-list" class="space-y-2">${renderList(
+                      resolved
+                    )}</div>
+                </div>
+            </div>
+        </div>
+        <div id="add-restriction-section" class="mt-6 pt-6 border-t border-gray-200">
+             <button id="show-add-restriction-form-btn" class="w-full bg-blue-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-blue-700">Adicionar/Vincular Restrição</button>
+             <div id="restriction-form-container" class="hidden">
+                <!-- Form will be rendered here -->
+             </div>
+        </div>
+        `;
+
+  // --- Event Listeners ---
+  document
+    .getElementById("show-add-restriction-form-btn")
+    .addEventListener("click", renderRestrictionFormContainer);
+  modalBody.addEventListener("click", handleModalActions);
+}
+
+function renderRestrictionFormContainer() {
+  document
+    .getElementById("show-add-restriction-form-btn")
+    .classList.add("hidden");
+  const container = document.getElementById("restriction-form-container");
+  container.classList.remove("hidden");
+
+  const linkedIds = new Set(
+    restrictionLinks
+      .filter((l) => l.itemId === currentOpenItemId)
+      .map((l) => l.restrictionId)
+  );
   const unlinkedRestrictions = restrictionsList.filter(
     (r) => !linkedIds.has(r.id) && r.status === "pending"
   );
@@ -763,60 +1102,67 @@ function renderModalContent() {
     .map((r) => `<option value="${r.id}">${r.desc}</option>`)
     .join("");
 
-  modalBody.innerHTML = `
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-x-8">
-                <div class="space-y-6">
-                    <div>
-                        <h3 class="text-lg font-semibold text-primary mb-2">Vincular Restrição Existente</h3>
-                        ${
-                          unlinkedOptions.length > 0
-                            ? `
-                        <form id="link-restriction-form" class="flex items-end gap-2">
-                            <div class="flex-grow">
-                                <label for="restr-select" class="form-label">Restrições Pendentes</label>
-                                <select id="restr-select">${unlinkedOptions}</select>
-                            </div>
-                            <button type="submit" class="bg-yellow-500 text-white font-semibold py-2 px-4 rounded-md hover:bg-yellow-600 h-10">Vincular</button>
-                        </form>`
-                            : `<p class="text-sm text-tertiary italic">Nenhuma outra restrição pendente para vincular.</p>`
-                        }
+  const mCategories = [
+    "Método",
+    "Máquina",
+    "Mão de Obra",
+    "Material",
+    "Medição",
+    "Meio Ambiente",
+  ];
+
+  container.innerHTML = `
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-6">
+            <div class="p-4 bg-tertiary rounded-lg border border-border-primary">
+                <h3 class="text-lg font-semibold text-primary mb-2">Vincular Restrição Existente</h3>
+                ${
+                  unlinkedOptions.length > 0
+                    ? `
+                <form id="link-restriction-form" class="flex items-end gap-2">
+                    <div class="flex-grow">
+                        <label for="restr-select" class="form-label">Restrições Pendentes</label>
+                        <select id="restr-select">${unlinkedOptions}</select>
                     </div>
+                    <button type="submit" class="bg-yellow-500 text-white font-semibold py-2 px-4 rounded-md hover:bg-yellow-600 h-10">Vincular</button>
+                </form>`
+                    : `<p class="text-sm text-tertiary italic">Nenhuma outra restrição pendente para vincular.</p>`
+                }
+            </div>
+            <div class="p-4 bg-tertiary rounded-lg border border-border-primary">
+                <h3 class="text-lg font-semibold text-primary mb-2">Adicionar Nova Restrição</h3>
+                <form id="add-restriction-form" class="space-y-4">
                     <div>
-                        <h3 class="text-lg font-semibold text-primary mb-2">Adicionar Nova Restrição</h3>
-                        <form id="add-restriction-form" class="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
-                            <div class="sm:col-span-2">
-                                <label for="restr-desc" class="form-label">Descrição</label>
-                                <input type="text" id="restr-desc" class="form-input" required>
-                            </div>
-                            <div>
-                                <label for="restr-resp" class="form-label">Responsável</label>
-                                <input type="text" id="restr-resp" class="form-input" required>
-                            </div>
-                            <div>
-                                <label for="restr-due" class="form-label">Prazo</label>
-                                <input type="date" id="restr-due" class="form-input" required>
-                            </div>
-                            <div class="sm:col-span-2">
-                                <button type="submit" class="w-full bg-blue-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-blue-700">Adicionar e Vincular</button>
-                            </div>
-                        </form>
+                        <label for="restr-desc" class="form-label">Descrição</label>
+                        <input type="text" id="restr-desc" class="form-input" required>
                     </div>
-                </div>
-                <div class="space-y-6 mt-6 lg:mt-0">
-                     <div>
-                        <h3 class="text-lg font-semibold text-primary mb-2">Pendentes</h3>
-                        <div id="pending-list" class="space-y-2">${renderList(
-                          pending
-                        )}</div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label for="restr-resp" class="form-label">Responsável</label>
+                            <input type="text" id="restr-resp" class="form-input" required>
+                        </div>
+                        <div>
+                            <label for="restr-due" class="form-label">Prazo</label>
+                            <input type="date" id="restr-due" class="form-input" required>
+                        </div>
                     </div>
                      <div>
-                        <h3 class="text-lg font-semibold text-primary mb-2">Resolvidas</h3>
-                        <div id="resolved-list" class="space-y-2">${renderList(
-                          resolved
-                        )}</div>
+                        <label class="form-label">Causa Raiz (6M)</label>
+                        <div id="m-category-selector" class="flex flex-wrap gap-2">
+                           ${mCategories
+                             .map(
+                               (cat) =>
+                                 `<button type="button" class="m-category-btn" data-category="${cat}">${cat}</button>`
+                             )
+                             .join("")}
+                        </div>
+                        <input type="hidden" id="restr-category" name="restr-category">
                     </div>
-                </div>
-            </div>`;
+                    <div>
+                        <button type="submit" class="w-full bg-blue-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-blue-700">Adicionar e Vincular</button>
+                    </div>
+                </form>
+            </div>
+        </div>`;
 
   if (unlinkedOptions.length > 0 && !activeTomSelect) {
     activeTomSelect = new TomSelect("#restr-select", {
@@ -832,24 +1178,21 @@ function renderModalContent() {
       .getElementById("link-restriction-form")
       .addEventListener("submit", handleLinkRestriction);
   }
-  modalBody.addEventListener("click", handleModalActions);
 
-  // Set initial focus for accessibility inside a timeout to ensure elements are rendered
-  setTimeout(() => {
-    // Try to focus the TomSelect first if it exists
-    if (activeTomSelect) {
-      activeTomSelect.focus();
-    } else {
-      // Otherwise, focus the description input
-      const descInput = document.getElementById("restr-desc");
-      if (descInput) {
-        descInput.focus();
-      } else {
-        // As a final fallback, focus the close button.
-        modalCloseBtn.focus();
-      }
-    }
-  }, 100); // A small delay to ensure the modal is fully rendered.
+  document
+    .getElementById("m-category-selector")
+    ?.addEventListener("click", (e) => {
+      const btn = e.target.closest(".m-category-btn");
+      if (!btn) return;
+      btn.parentElement
+        .querySelectorAll(".active")
+        .forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      document.getElementById("restr-category").value = btn.dataset.category;
+    });
+
+  const descInput = document.getElementById("restr-desc");
+  if (descInput) descInput.focus();
 }
 
 function handleModalActions(e) {
@@ -869,6 +1212,7 @@ async function handleSaveRestriction(e) {
   const desc = document.getElementById("restr-desc").value;
   const resp = document.getElementById("restr-resp").value;
   const due = document.getElementById("restr-due").value;
+  const category = document.getElementById("restr-category").value;
 
   if (!desc || !resp || !due) return;
 
@@ -878,12 +1222,28 @@ async function handleSaveRestriction(e) {
     resp,
     due,
     status: "pending",
+    category: category || null,
   };
   restrictionsList.push(newRestriction);
   restrictionLinks.push({
     restrictionId: newRestriction.id,
     itemId: currentOpenItemId,
   });
+
+  // Update the pre-processed map
+  if (!itemRestrictionInfoMap.has(currentOpenItemId)) {
+    itemRestrictionInfoMap.set(currentOpenItemId, {
+      hasPending: false,
+      pendingCount: 0,
+      pendingCategories: new Set(),
+    });
+  }
+  const info = itemRestrictionInfoMap.get(currentOpenItemId);
+  info.hasPending = true;
+  info.pendingCount++;
+  if (newRestriction.category) {
+    info.pendingCategories.add(newRestriction.category);
+  }
 
   await Promise.all([
     storage.saveData(storage.APP_KEYS.RESTRICTIONS_LIST_KEY, restrictionsList),
@@ -895,7 +1255,7 @@ async function handleSaveRestriction(e) {
     activeTomSelect.destroy();
     activeTomSelect = null;
   }
-  renderModalContent();
+  renderDetailsCard();
   renderCurrentWeekView();
 }
 
@@ -908,6 +1268,25 @@ async function handleLinkRestriction(e) {
     restrictionId: selectedId,
     itemId: currentOpenItemId,
   });
+
+  // Update the pre-processed map
+  const restriction = restrictionsList.find((r) => r.id === selectedId);
+  if (restriction && restriction.status === "pending") {
+    if (!itemRestrictionInfoMap.has(currentOpenItemId)) {
+      itemRestrictionInfoMap.set(currentOpenItemId, {
+        hasPending: false,
+        pendingCount: 0,
+        pendingCategories: new Set(),
+      });
+    }
+    const info = itemRestrictionInfoMap.get(currentOpenItemId);
+    info.hasPending = true;
+    info.pendingCount++;
+    if (restriction.category) {
+      info.pendingCategories.add(restriction.category);
+    }
+  }
+
   await storage.saveData(
     storage.APP_KEYS.RESTRICTION_LINKS_KEY,
     restrictionLinks
@@ -915,20 +1294,52 @@ async function handleLinkRestriction(e) {
 
   activeTomSelect.destroy();
   activeTomSelect = null;
-  renderModalContent();
+  renderDetailsCard();
   renderCurrentWeekView();
 }
 
 async function toggleRestrictionStatus(restrictionId) {
   const restriction = restrictionsList.find((r) => r.id === restrictionId);
   if (restriction) {
-    restriction.status =
-      restriction.status === "pending" ? "resolved" : "pending";
+    const wasPending = restriction.status === "pending";
+    restriction.status = wasPending ? "resolved" : "pending";
+
+    // Update the pre-processed map for all linked items
+    const linkedItems = restrictionLinks
+      .filter((l) => l.restrictionId === restrictionId)
+      .map((l) => l.itemId);
+    linkedItems.forEach((itemId) => {
+      const info = itemRestrictionInfoMap.get(itemId);
+      if (info) {
+        info.pendingCount += wasPending ? -1 : 1;
+        info.hasPending = info.pendingCount > 0;
+        if (restriction.category) {
+          if (wasPending) {
+            // Only remove category if no other pending restrictions of this category exist for this item
+            const otherPendingWithCategory = restrictionsList.some(
+              (r) =>
+                r.id !== restrictionId &&
+                r.category === restriction.category &&
+                r.status === "pending" &&
+                restrictionLinks.some(
+                  (l) => l.itemId === itemId && l.restrictionId === r.id
+                )
+            );
+            if (!otherPendingWithCategory) {
+              info.pendingCategories.delete(restriction.category);
+            }
+          } else {
+            info.pendingCategories.add(restriction.category);
+          }
+        }
+      }
+    });
+
     await storage.saveData(
       storage.APP_KEYS.RESTRICTIONS_LIST_KEY,
       restrictionsList
     );
-    renderModalContent();
+    renderDetailsCard();
     renderCurrentWeekView();
   }
 }
@@ -939,6 +1350,37 @@ async function unlinkRestriction(restrictionId) {
       "Tem certeza que deseja desvincular esta restrição desta atividade? A restrição não será excluída."
     )
   ) {
+    // Update the pre-processed map BEFORE changing the links
+    const restriction = restrictionsList.find((r) => r.id === restrictionId);
+    if (restriction && restriction.status === "pending") {
+      const info = itemRestrictionInfoMap.get(currentOpenItemId);
+      if (info) {
+        info.pendingCount--;
+        info.hasPending = info.pendingCount > 0;
+        if (restriction.category) {
+          // Only remove category if no other pending restrictions of this category exist for this item
+          const otherPendingWithCategory = restrictionLinks.some((l) => {
+            if (
+              l.itemId !== currentOpenItemId ||
+              l.restrictionId === restrictionId
+            )
+              return false;
+            const otherRestr = restrictionsList.find(
+              (r) => r.id === l.restrictionId
+            );
+            return (
+              otherRestr &&
+              otherRestr.status === "pending" &&
+              otherRestr.category === restriction.category
+            );
+          });
+          if (!otherPendingWithCategory) {
+            info.pendingCategories.delete(restriction.category);
+          }
+        }
+      }
+    }
+
     restrictionLinks = restrictionLinks.filter(
       (l) =>
         !(l.itemId === currentOpenItemId && l.restrictionId === restrictionId)
@@ -947,11 +1389,12 @@ async function unlinkRestriction(restrictionId) {
       storage.APP_KEYS.RESTRICTION_LINKS_KEY,
       restrictionLinks
     );
+
     if (activeTomSelect) {
       activeTomSelect.destroy();
       activeTomSelect = null;
     }
-    renderModalContent();
+    renderDetailsCard();
     renderCurrentWeekView();
   }
 }

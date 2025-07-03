@@ -208,15 +208,32 @@ export function showToast(message, type = "info", duration = 3000) {
 }
 
 /**
- * Formata uma string de data (ex: '2023-12-25 14:30') para o padrão brasileiro (dd/mm/yyyy).
- * @param {string} d A string da data.
+ * Formata uma string de data (ex: '2023-12-25 14:30' ou '2023-12-25T14:30:00Z') ou um objeto Date para o padrão brasileiro (dd/mm/yyyy).
+ * @param {string | Date} d A string da data ou o objeto Date.
  * @returns {string} A data formatada ou 'N/A'.
  */
 export function formatBrazilianDate(d) {
   if (!d) return "N/A";
-  const datePart = d.split(" ")[0];
-  const [y, m, day] = datePart.split("-");
-  return y && m && day ? `${day}/${m}/${y}` : d;
+  try {
+    // new Date() é robusto e lida com objetos Date, strings ISO com 'T' e strings com espaço.
+    // A substituição de ' ' por 'T' aumenta a robustez para o formato do P6.
+    const date = new Date(typeof d === "string" ? d.replace(" ", "T") : d);
+
+    // Verifica se a data é válida.
+    if (isNaN(date.getTime())) {
+      return "N/A";
+    }
+
+    // Usa métodos UTC para evitar que o fuso horário mude o dia da data.
+    // Isso trata as datas como absolutas, o que é geralmente o esperado para cronogramas.
+    const day = String(date.getUTCDate()).padStart(2, "0");
+    const month = String(date.getUTCMonth() + 1).padStart(2, "0"); // Mês é 0-indexado
+    const year = date.getUTCFullYear();
+
+    return `${day}/${month}/${year}`;
+  } catch (error) {
+    return "N/A"; // Retorna 'N/A' em caso de qualquer erro de parsing.
+  }
 }
 
 /**
