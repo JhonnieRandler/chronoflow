@@ -1,5 +1,15 @@
-import { initializationError, showFirebaseError } from "./firebase-config.js";
+import {
+  initializationError,
+  showFirebaseError,
+  storage as firebaseStorage, // Alias to avoid name collision with app's storage module
+} from "./firebase-config.js";
 import * as utils from "./utils.js";
+import {
+  ref,
+  uploadBytes,
+  getDownloadURL,
+  deleteObject,
+} from "https://www.gstatic.com/firebasejs/11.9.1/firebase-storage.js";
 
 // First, check if Firebase is configured. If not, show an error and stop.
 if (initializationError) {
@@ -40,7 +50,8 @@ let fullTaskList = [],
   customValuesData = new Map(),
   restrictionsList = [],
   restrictionLinks = [],
-  itemRestrictionInfoMap = new Map();
+  itemRestrictionInfoMap = new Map(),
+  activityMediaMap = new Map();
 let currentWeekIndex = 0;
 let groupedByWeek = {};
 let currentFilter = "all";
@@ -76,6 +87,14 @@ function uuidv4() {
       storage.APP_KEYS.CUSTOM_VALUES_KEY
     );
     customValuesData = new Map(customValuesRaw.map((item) => [item.id, item]));
+
+    const activityMedia = await storage.getActivityMedia();
+    activityMediaMap = new Map(
+      activityMedia.map((item) => [
+        item.id,
+        { imageUrl: item.imageUrl, storagePath: item.storagePath },
+      ])
+    );
 
     if (!projectBase || Object.keys(projectBase).length === 0) {
       dashboardOutput.innerHTML = `<div class="message-box col-span-full">Nenhum projeto base encontrado. Faça o upload de um arquivo .xer.</div>`;
@@ -491,6 +510,10 @@ async function renderCurrentWeekView() {
               ? item.data.groupName
               : `${item.relatedTasks[0].task_code}: ${item.relatedTasks[0].task_name}`;
 
+          const hasPhoto = activityMediaMap.has(itemId);
+          let photoBadge = hasPhoto
+            ? '<span class="photo-badge" title="Este item possui foto">📸</span>'
+            : "";
           const pendingCount =
             itemRestrictionInfoMap.get(itemId)?.pendingCount || 0;
           let restrictionBadge =
@@ -534,7 +557,7 @@ async function renderCurrentWeekView() {
               stagesInWeek.length > 1
                 ? `Etapas ${stagesInWeek.join(", ")}`
                 : `Etapa ${stagesInWeek[0]}`;
-            html += `<div role="button" tabindex="0" class="${itemEntryClass}" ${tooltipHtml} data-item-id="${itemId}" data-item-name="${itemName}"><div class="flex justify-between items-center"><p class="font-semibold text-primary">${groupName}</p><div>${restrictionBadge}${tagHtml}</div></div><p class="text-sm text-tertiary italic">${stageText} de ${totalStages}</p></div>`;
+            html += `<div role="button" tabindex="0" class="${itemEntryClass}" ${tooltipHtml} data-item-id="${itemId}" data-item-name="${itemName}"><div class="flex justify-between items-center"><p class="font-semibold text-primary">${groupName}</p><div>${photoBadge}${restrictionBadge}${tagHtml}</div></div><p class="text-sm text-tertiary italic">${stageText} de ${totalStages}</p></div>`;
           } else {
             const task = item.relatedTasks[0];
 
@@ -542,7 +565,7 @@ async function renderCurrentWeekView() {
               tagHtml += `<span class="tag tag-start">Início</span>`;
             if (task.tag.includes("Fim"))
               tagHtml += `<span class="tag tag-end">Fim</span>`;
-            html += `<div role="button" tabindex="0" class="${itemEntryClass}" ${tooltipHtml} data-item-id="${itemId}" data-item-name="${itemTitle}"><div class="flex justify-between items-center"><p class="font-semibold text-primary">${task.task_name}</p><div>${restrictionBadge}${tagHtml}</div></div><p class="text-sm text-secondary">${task.task_code}</p></div>`;
+            html += `<div role="button" tabindex="0" class="${itemEntryClass}" ${tooltipHtml} data-item-id="${itemId}" data-item-name="${itemTitle}"><div class="flex justify-between items-center"><p class="font-semibold text-primary">${task.task_name}</p><div>${photoBadge}${restrictionBadge}${tagHtml}</div></div><p class="text-sm text-secondary">${task.task_code}</p></div>`;
           }
         });
         html += "</div>";
@@ -656,7 +679,7 @@ function toggleAllWbs(event) {
   });
 
   btn.dataset.state = isExpanding ? "expanded" : "collapsed";
-  btn.textContent = isExpanding ? "Minimizar Tudo" : "Expandir Tudo";
+  btn.textContent = isExpanding ? "Minimizar Tudo" : "Minimizar Tudo";
 }
 
 async function expandAllWbs() {
@@ -1050,29 +1073,41 @@ function renderDetailsCard() {
     </div>`;
 
   modalBody.innerHTML = `
-        ${infoCardHtml}
-        <div class="mt-6">
-            <h3 class="text-lg font-semibold text-primary mb-2">Restrições Vinculadas</h3>
-            <div class="space-y-4">
-                 <div>
-                    <h4 class="font-medium text-secondary mb-2">Pendentes</h4>
-                    <div id="pending-list" class="space-y-2">${renderList(
-                      pending
-                    )}</div>
-                </div>
-                 <div>
-                    <h4 class="font-medium text-secondary mb-2">Resolvidas</h4>
-                    <div id="resolved-list" class="space-y-2">${renderList(
-                      resolved
-                    )}</div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                ${infoCardHtml}
+                <div class="mt-6">
+                    <h3 class="text-lg font-semibold text-primary mb-2">Restrições Vinculadas</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <h4 class="font-medium text-secondary mb-2">Pendentes</h4>
+                            <div id="pending-list" class="space-y-2">${renderList(
+                              pending
+                            )}</div>
+                        </div>
+                        <div>
+                            <h4 class="font-medium text-secondary mb-2">Resolvidas</h4>
+                            <div id="resolved-list" class="space-y-2">${renderList(
+                              resolved
+                            )}</div>
+                        </div>
+                    </div>
                 </div>
             </div>
-        </div>
-        <div id="add-restriction-section" class="mt-6 pt-6 border-t border-gray-200">
-             <button id="show-add-restriction-form-btn" class="w-full bg-blue-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-blue-700">Adicionar/Vincular Restrição</button>
-             <div id="restriction-form-container" class="hidden">
-                <!-- Form will be rendered here -->
-             </div>
+             <div>
+                <div id="photo-section">
+                    <h3 class="text-lg font-semibold text-primary mb-3">Foto da Atividade</h3>
+                    <div id="photo-content-wrapper" class="p-4 bg-tertiary rounded-lg border border-border-primary min-h-[200px] flex items-center justify-center">
+                        ${renderPhotoContent()}
+                    </div>
+                </div>
+                <div id="add-restriction-section" class="mt-6 pt-6 border-t border-border-primary">
+                    <button id="show-add-restriction-form-btn" class="w-full bg-blue-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-blue-700">Adicionar/Vincular Restrição</button>
+                    <div id="restriction-form-container" class="hidden">
+                        <!-- Form will be rendered here -->
+                    </div>
+                </div>
+            </div>
         </div>
         `;
 
@@ -1081,6 +1116,12 @@ function renderDetailsCard() {
     .getElementById("show-add-restriction-form-btn")
     .addEventListener("click", renderRestrictionFormContainer);
   modalBody.addEventListener("click", handleModalActions);
+  modalBody
+    .querySelector("#photo-content-wrapper")
+    .addEventListener("click", handlePhotoClick);
+  modalBody
+    .querySelector("#photo-content-wrapper")
+    .addEventListener("change", handlePhotoChange);
 }
 
 function renderRestrictionFormContainer() {
@@ -1112,7 +1153,7 @@ function renderRestrictionFormContainer() {
   ];
 
   container.innerHTML = `
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-6">
+        <div class="space-y-4">
             <div class="p-4 bg-tertiary rounded-lg border border-border-primary">
                 <h3 class="text-lg font-semibold text-primary mb-2">Vincular Restrição Existente</h3>
                 ${
@@ -1162,21 +1203,13 @@ function renderRestrictionFormContainer() {
                     </div>
                 </form>
             </div>
-        </div>`;
+        </div>
+    `;
 
-  if (unlinkedOptions.length > 0 && !activeTomSelect) {
+  if (unlinkedOptions.length > 0) {
     activeTomSelect = new TomSelect("#restr-select", {
-      placeholder: "Selecione...",
+      placeholder: "Selecione uma restrição...",
     });
-  }
-
-  document
-    .getElementById("add-restriction-form")
-    .addEventListener("submit", handleSaveRestriction);
-  if (document.getElementById("link-restriction-form")) {
-    document
-      .getElementById("link-restriction-form")
-      .addEventListener("submit", handleLinkRestriction);
   }
 
   document
@@ -1184,203 +1217,40 @@ function renderRestrictionFormContainer() {
     ?.addEventListener("click", (e) => {
       const btn = e.target.closest(".m-category-btn");
       if (!btn) return;
+
+      const categoryInput = document.getElementById("restr-category");
+      const isAlreadyActive = btn.classList.contains("active");
+
       btn.parentElement
         .querySelectorAll(".active")
         .forEach((b) => b.classList.remove("active"));
-      btn.classList.add("active");
-      document.getElementById("restr-category").value = btn.dataset.category;
-    });
 
-  const descInput = document.getElementById("restr-desc");
-  if (descInput) descInput.focus();
-}
-
-function handleModalActions(e) {
-  const restrictionItem = e.target.closest(".restriction-item");
-  if (!restrictionItem) return;
-  const restrictionId = restrictionItem.dataset.restrId;
-
-  if (e.target.classList.contains("toggle-status-btn")) {
-    toggleRestrictionStatus(restrictionId);
-  } else if (e.target.classList.contains("unlink-btn")) {
-    unlinkRestriction(restrictionId);
-  }
-}
-
-async function handleSaveRestriction(e) {
-  e.preventDefault();
-  const desc = document.getElementById("restr-desc").value;
-  const resp = document.getElementById("restr-resp").value;
-  const due = document.getElementById("restr-due").value;
-  const category = document.getElementById("restr-category").value;
-
-  if (!desc || !resp || !due) return;
-
-  const newRestriction = {
-    id: uuidv4(),
-    desc,
-    resp,
-    due,
-    status: "pending",
-    category: category || null,
-  };
-  restrictionsList.push(newRestriction);
-  restrictionLinks.push({
-    restrictionId: newRestriction.id,
-    itemId: currentOpenItemId,
-  });
-
-  // Update the pre-processed map
-  if (!itemRestrictionInfoMap.has(currentOpenItemId)) {
-    itemRestrictionInfoMap.set(currentOpenItemId, {
-      hasPending: false,
-      pendingCount: 0,
-      pendingCategories: new Set(),
-    });
-  }
-  const info = itemRestrictionInfoMap.get(currentOpenItemId);
-  info.hasPending = true;
-  info.pendingCount++;
-  if (newRestriction.category) {
-    info.pendingCategories.add(newRestriction.category);
-  }
-
-  await Promise.all([
-    storage.saveData(storage.APP_KEYS.RESTRICTIONS_LIST_KEY, restrictionsList),
-    storage.saveData(storage.APP_KEYS.RESTRICTION_LINKS_KEY, restrictionLinks),
-  ]);
-
-  e.target.reset();
-  if (activeTomSelect) {
-    activeTomSelect.destroy();
-    activeTomSelect = null;
-  }
-  renderDetailsCard();
-  renderCurrentWeekView();
-}
-
-async function handleLinkRestriction(e) {
-  e.preventDefault();
-  const selectedId = activeTomSelect.getValue();
-  if (!selectedId) return;
-
-  restrictionLinks.push({
-    restrictionId: selectedId,
-    itemId: currentOpenItemId,
-  });
-
-  // Update the pre-processed map
-  const restriction = restrictionsList.find((r) => r.id === selectedId);
-  if (restriction && restriction.status === "pending") {
-    if (!itemRestrictionInfoMap.has(currentOpenItemId)) {
-      itemRestrictionInfoMap.set(currentOpenItemId, {
-        hasPending: false,
-        pendingCount: 0,
-        pendingCategories: new Set(),
-      });
-    }
-    const info = itemRestrictionInfoMap.get(currentOpenItemId);
-    info.hasPending = true;
-    info.pendingCount++;
-    if (restriction.category) {
-      info.pendingCategories.add(restriction.category);
-    }
-  }
-
-  await storage.saveData(
-    storage.APP_KEYS.RESTRICTION_LINKS_KEY,
-    restrictionLinks
-  );
-
-  activeTomSelect.destroy();
-  activeTomSelect = null;
-  renderDetailsCard();
-  renderCurrentWeekView();
-}
-
-async function toggleRestrictionStatus(restrictionId) {
-  const restriction = restrictionsList.find((r) => r.id === restrictionId);
-  if (restriction) {
-    const wasPending = restriction.status === "pending";
-    restriction.status = wasPending ? "resolved" : "pending";
-
-    // Update the pre-processed map for all linked items
-    const linkedItems = restrictionLinks
-      .filter((l) => l.restrictionId === restrictionId)
-      .map((l) => l.itemId);
-    linkedItems.forEach((itemId) => {
-      const info = itemRestrictionInfoMap.get(itemId);
-      if (info) {
-        info.pendingCount += wasPending ? -1 : 1;
-        info.hasPending = info.pendingCount > 0;
-        if (restriction.category) {
-          if (wasPending) {
-            // Only remove category if no other pending restrictions of this category exist for this item
-            const otherPendingWithCategory = restrictionsList.some(
-              (r) =>
-                r.id !== restrictionId &&
-                r.category === restriction.category &&
-                r.status === "pending" &&
-                restrictionLinks.some(
-                  (l) => l.itemId === itemId && l.restrictionId === r.id
-                )
-            );
-            if (!otherPendingWithCategory) {
-              info.pendingCategories.delete(restriction.category);
-            }
-          } else {
-            info.pendingCategories.add(restriction.category);
-          }
-        }
+      if (isAlreadyActive) {
+        categoryInput.value = "";
+      } else {
+        btn.classList.add("active");
+        categoryInput.value = btn.dataset.category;
       }
     });
+}
 
+async function handleModalActions(e) {
+  const restrictionItem = e.target.closest(".restriction-item");
+  if (!restrictionItem) return;
+
+  const restrictionId = restrictionItem.dataset.restrId;
+  const restriction = restrictionsList.find((r) => r.id === restrictionId);
+  if (!restriction) return;
+
+  if (e.target.classList.contains("toggle-status-btn")) {
+    restriction.status =
+      restriction.status === "pending" ? "resolved" : "pending";
     await storage.saveData(
       storage.APP_KEYS.RESTRICTIONS_LIST_KEY,
       restrictionsList
     );
-    renderDetailsCard();
-    renderCurrentWeekView();
-  }
-}
-
-async function unlinkRestriction(restrictionId) {
-  if (
-    confirm(
-      "Tem certeza que deseja desvincular esta restrição desta atividade? A restrição não será excluída."
-    )
-  ) {
-    // Update the pre-processed map BEFORE changing the links
-    const restriction = restrictionsList.find((r) => r.id === restrictionId);
-    if (restriction && restriction.status === "pending") {
-      const info = itemRestrictionInfoMap.get(currentOpenItemId);
-      if (info) {
-        info.pendingCount--;
-        info.hasPending = info.pendingCount > 0;
-        if (restriction.category) {
-          // Only remove category if no other pending restrictions of this category exist for this item
-          const otherPendingWithCategory = restrictionLinks.some((l) => {
-            if (
-              l.itemId !== currentOpenItemId ||
-              l.restrictionId === restrictionId
-            )
-              return false;
-            const otherRestr = restrictionsList.find(
-              (r) => r.id === l.restrictionId
-            );
-            return (
-              otherRestr &&
-              otherRestr.status === "pending" &&
-              otherRestr.category === restriction.category
-            );
-          });
-          if (!otherPendingWithCategory) {
-            info.pendingCategories.delete(restriction.category);
-          }
-        }
-      }
-    }
-
+    utils.showToast("Status da restrição alterado.", "success");
+  } else if (e.target.classList.contains("unlink-btn")) {
     restrictionLinks = restrictionLinks.filter(
       (l) =>
         !(l.itemId === currentOpenItemId && l.restrictionId === restrictionId)
@@ -1389,12 +1259,210 @@ async function unlinkRestriction(restrictionId) {
       storage.APP_KEYS.RESTRICTION_LINKS_KEY,
       restrictionLinks
     );
-
-    if (activeTomSelect) {
-      activeTomSelect.destroy();
-      activeTomSelect = null;
+    utils.showToast("Restrição desvinculada.", "success");
+  } else if (e.target.closest("#link-restriction-form")) {
+    e.preventDefault();
+    const selectedId = activeTomSelect.getValue();
+    if (!selectedId) {
+      utils.showToast("Selecione uma restrição para vincular.", "error");
+      return;
     }
-    renderDetailsCard();
-    renderCurrentWeekView();
+    restrictionLinks.push({
+      restrictionId: selectedId,
+      itemId: currentOpenItemId,
+    });
+    await storage.saveData(
+      storage.APP_KEYS.RESTRICTION_LINKS_KEY,
+      restrictionLinks
+    );
+    utils.showToast("Restrição vinculada com sucesso.", "success");
+    activeTomSelect.destroy();
+    activeTomSelect = null;
+  } else if (e.target.closest("#add-restriction-form")) {
+    e.preventDefault();
+    const newId = uuidv4();
+    const newRestriction = {
+      id: newId,
+      desc: document.getElementById("restr-desc").value.trim(),
+      resp: document.getElementById("restr-resp").value.trim(),
+      due: document.getElementById("restr-due").value.trim(),
+      category: document.getElementById("restr-category").value || null,
+      status: "pending",
+    };
+    if (!newRestriction.desc || !newRestriction.resp || !newRestriction.due) {
+      utils.showToast("Preencha todos os campos da nova restrição.", "error");
+      return;
+    }
+    restrictionsList.push(newRestriction);
+    restrictionLinks.push({ restrictionId: newId, itemId: currentOpenItemId });
+    await Promise.all([
+      storage.saveData(
+        storage.APP_KEYS.RESTRICTIONS_LIST_KEY,
+        restrictionsList
+      ),
+      storage.saveData(
+        storage.APP_KEYS.RESTRICTION_LINKS_KEY,
+        restrictionLinks
+      ),
+    ]);
+    utils.showToast("Nova restrição adicionada e vinculada.", "success");
+  }
+
+  // Common logic for all actions: update maps and re-render
+  itemRestrictionInfoMap.clear();
+  restrictionLinks.forEach((link) => {
+    const restriction = restrictionsList.find(
+      (r) => r.id === link.restrictionId
+    );
+    if (!restriction) return;
+
+    if (!itemRestrictionInfoMap.has(link.itemId)) {
+      itemRestrictionInfoMap.set(link.itemId, {
+        hasPending: false,
+        pendingCount: 0,
+        pendingCategories: new Set(),
+      });
+    }
+    const info = itemRestrictionInfoMap.get(link.itemId);
+    if (restriction.status === "pending") {
+      info.hasPending = true;
+      info.pendingCount++;
+      if (restriction.category)
+        info.pendingCategories.add(restriction.category);
+    }
+  });
+
+  renderDetailsCard();
+  await renderCurrentWeekView();
+}
+
+// --- Photo Management Functions ---
+
+function renderPhotoContent() {
+  if (!currentOpenItemId) return "";
+
+  const media = activityMediaMap.get(currentOpenItemId);
+  if (media?.imageUrl) {
+    return `
+      <div class="relative group">
+        <img src="${media.imageUrl}" alt="Foto da atividade" class="max-h-[300px] max-w-full rounded-lg object-contain">
+        <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all flex items-center justify-center rounded-lg">
+            <button class="remove-photo-btn hidden group-hover:block px-4 py-2 bg-red-600 text-white rounded-md text-sm font-semibold">Remover Foto</button>
+        </div>
+      </div>
+    `;
+  } else {
+    return `
+      <div id="photo-upload-area" class="text-center">
+        <p class="text-tertiary mb-4">Nenhuma foto para este item.</p>
+        <label for="photo-file-input" class="file-input-label cursor-pointer">Adicionar Foto</label>
+        <input type="file" id="photo-file-input" class="sr-only" accept="image/png, image/jpeg, image/gif">
+      </div>
+    `;
+  }
+}
+
+function handlePhotoClick(e) {
+  if (e.target.classList.contains("remove-photo-btn")) {
+    handleRemovePhoto();
+  }
+}
+
+async function handlePhotoChange(e) {
+  if (e.target.id !== "photo-file-input") return;
+
+  const file = e.target.files[0];
+  if (!file || !currentOpenItemId) return;
+
+  const wrapper = document.getElementById("photo-content-wrapper");
+  if (!wrapper) return;
+
+  // Show a loading state
+  wrapper.innerHTML = `
+      <div class="flex flex-col items-center gap-2 text-primary">
+          <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          <span>Enviando...</span>
+      </div>
+    `;
+
+  try {
+    const existingMedia = activityMediaMap.get(currentOpenItemId);
+    // If a photo already exists, delete it from Firebase Storage first
+    if (existingMedia?.storagePath) {
+      const oldStorageRef = ref(firebaseStorage, existingMedia.storagePath);
+      await deleteObject(oldStorageRef).catch((err) =>
+        console.warn("Old photo deletion failed, might not exist:", err)
+      );
+    }
+
+    const fileExtension = file.name.split(".").pop();
+    const storagePath = `activity_photos/${currentOpenItemId}_${Date.now()}.${fileExtension}`;
+    const storageRef = ref(firebaseStorage, storagePath);
+
+    // Upload the new file
+    const snapshot = await uploadBytes(storageRef, file);
+    const downloadURL = await getDownloadURL(snapshot.ref);
+
+    // Save metadata to Firestore
+    const mediaData = {
+      imageUrl: downloadURL,
+      storagePath: storagePath,
+      uploadedAt: new Date().toISOString(),
+    };
+    await storage.saveActivityMedia(currentOpenItemId, mediaData);
+
+    // Update local state
+    activityMediaMap.set(currentOpenItemId, mediaData);
+
+    // Re-render the photo content and the main week view to show the badge
+    wrapper.innerHTML = renderPhotoContent();
+    await renderCurrentWeekView();
+    utils.showToast("Foto enviada com sucesso!", "success");
+  } catch (error) {
+    console.error("Erro no upload da foto:", error);
+    utils.showToast(`Falha no upload: ${error.message}`, "error");
+    // Restore original upload button on error
+    wrapper.innerHTML = renderPhotoContent();
+  }
+}
+
+async function handleRemovePhoto() {
+  if (
+    !currentOpenItemId ||
+    !confirm("Tem certeza que deseja remover esta foto?")
+  )
+    return;
+
+  const wrapper = document.getElementById("photo-content-wrapper");
+  if (!wrapper) return;
+
+  wrapper.innerHTML = `
+        <div class="flex flex-col items-center gap-2 text-primary">
+            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600"></div>
+            <span>Removendo...</span>
+        </div>
+    `;
+
+  try {
+    const media = activityMediaMap.get(currentOpenItemId);
+    if (media?.storagePath) {
+      const storageRef = ref(firebaseStorage, media.storagePath);
+      await deleteObject(storageRef);
+    }
+
+    // Delete from Firestore
+    await storage.deleteActivityMedia(currentOpenItemId);
+
+    // Update local state
+    activityMediaMap.delete(currentOpenItemId);
+
+    // Re-render
+    wrapper.innerHTML = renderPhotoContent();
+    await renderCurrentWeekView();
+    utils.showToast("Foto removida.", "success");
+  } catch (error) {
+    console.error("Erro ao remover foto:", error);
+    utils.showToast(`Falha ao remover: ${error.message}`, "error");
+    wrapper.innerHTML = renderPhotoContent();
   }
 }

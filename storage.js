@@ -18,6 +18,7 @@ import {
   collection,
   getDocs,
   writeBatch,
+  deleteDoc,
 } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
 
 const APP_KEYS = {
@@ -54,6 +55,9 @@ const baseCollectionRef = !initializationError
   : null;
 const versionsCollectionRef = !initializationError
   ? collection(db, "project_versions")
+  : null;
+const mediaCollectionRef = !initializationError
+  ? collection(db, "activity_media")
   : null;
 
 /**
@@ -166,16 +170,72 @@ async function saveProjectVersion(versionId, versionData) {
 }
 
 /**
+ * Retrieves all media metadata documents from the 'activity_media' collection.
+ * @returns {Promise<Array<Object>>} An array of media objects, each with id and data.
+ */
+async function getActivityMedia() {
+  if (!mediaCollectionRef) return [];
+  const media = [];
+  try {
+    const querySnapshot = await getDocs(mediaCollectionRef);
+    querySnapshot.forEach((doc) => {
+      media.push({ id: doc.id, ...doc.data() });
+    });
+    return media;
+  } catch (e) {
+    console.error("Error fetching activity media:", e);
+    return [];
+  }
+}
+
+/**
+ * Saves a media metadata document for a specific item.
+ * @param {string} itemId The ID of the task or group.
+ * @param {Object} data The media data { imageUrl, storagePath, uploadedAt }.
+ */
+async function saveActivityMedia(itemId, data) {
+  if (!mediaCollectionRef) throw new Error("Firebase not initialized.");
+  try {
+    const docRef = doc(mediaCollectionRef, itemId);
+    await setDoc(docRef, data);
+  } catch (e) {
+    console.error(`Error saving media for item '${itemId}':`, e);
+    throw e;
+  }
+}
+
+/**
+ * Deletes a media metadata document for a specific item.
+ * @param {string} itemId The ID of the task or group to delete media for.
+ */
+async function deleteActivityMedia(itemId) {
+  if (!mediaCollectionRef) throw new Error("Firebase not initialized.");
+  try {
+    const docRef = doc(mediaCollectionRef, itemId);
+    await deleteDoc(docRef);
+  } catch (e) {
+    console.error(`Error deleting media for item '${itemId}':`, e);
+    throw e;
+  }
+}
+
+/**
  * Exports all data from all collections into a single structured JS object for backup.
  * @returns {Promise<Object>} An object containing all stored data.
  */
 async function exportAllData() {
-  if (!configCollectionRef || !baseCollectionRef || !versionsCollectionRef)
+  if (
+    !configCollectionRef ||
+    !baseCollectionRef ||
+    !versionsCollectionRef ||
+    !mediaCollectionRef
+  )
     return {};
   const backupData = {
     config: {},
     base: {},
     versions: {},
+    media: {},
   };
   try {
     // Export config data
@@ -196,16 +256,22 @@ async function exportAllData() {
       backupData.versions[doc.id] = doc.data();
     });
 
+    // Export media data
+    const mediaSnapshot = await getDocs(mediaCollectionRef);
+    mediaSnapshot.forEach((doc) => {
+      backupData.media[doc.id] = doc.data();
+    });
+
     return backupData;
   } catch (e) {
     console.error("Error exporting all data from Firestore:", e);
-    return { config: {}, base: {}, versions: {} };
+    return { config: {}, base: {}, versions: {}, media: {} };
   }
 }
 
 /**
  * Imports data from a structured JS object, overwriting existing data.
- * @param {Object} data The object containing `config`, `base`, and `versions` data.
+ * @param {Object} data The object containing `config`, `base`, `versions`, and `media` data.
  * @returns {Promise<number>} The number of documents successfully written.
  */
 async function importAllData(data) {
@@ -213,11 +279,13 @@ async function importAllData(data) {
     !configCollectionRef ||
     !baseCollectionRef ||
     !versionsCollectionRef ||
+    !mediaCollectionRef ||
     !data ||
     typeof data !== "object" ||
     !data.config ||
     !data.base ||
-    !data.versions
+    !data.versions ||
+    !data.media
   ) {
     throw new Error("Invalid backup file structure.");
   }
@@ -249,13 +317,22 @@ async function importAllData(data) {
     }
   }
 
+  // Import media data
+  for (const itemId in data.media) {
+    if (Object.hasOwnProperty.call(data.media, itemId)) {
+      const docRef = doc(mediaCollectionRef, itemId);
+      batch.set(docRef, data.media[itemId]);
+    }
+  }
+
   try {
     await batch.commit();
     // Batch writes don't return a count, so we calculate it.
     const count =
       Object.keys(data.config).length +
       (Object.keys(data.base).length > 0 ? 1 : 0) +
-      Object.keys(data.versions).length;
+      Object.keys(data.versions).length +
+      Object.keys(data.media).length;
     return count;
   } catch (e) {
     console.error("Error importing all data to Firestore:", e);
@@ -272,6 +349,9 @@ export const storage = {
   saveProjectBase,
   getProjectVersions,
   saveProjectVersion,
+  getActivityMedia,
+  saveActivityMedia,
+  deleteActivityMedia,
   exportAllData,
   importAllData,
 };

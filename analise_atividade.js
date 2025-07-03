@@ -221,7 +221,7 @@ function renderGenuineValuesCard(itemId) {
   const progress = planned > 0 ? (actual / planned) * 100 : 0;
 
   return `
-            <div class="card p-6 genuine-card">
+            <div class="card p-6genuine-card">
                 <h2 class="text-xl font-bold text-yellow-800 mb-4">Análise de Valores Topográficos</h2>
                 <div class="info-grid">
                     <div class="info-item genuine-item">

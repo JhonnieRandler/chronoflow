@@ -1205,6 +1205,14 @@ html.dark .restriction-badge {
   color: #fecaca;
 }
 
+.photo-badge {
+  margin-right: 0.5rem;
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.9rem; /* Slightly larger for emoji */
+  vertical-align: middle;
+}
+
 .wbs-content {
   overflow: hidden;
   transition: max-height 0.5s cubic-bezier(0.4, 0, 0.2, 1);
@@ -1418,6 +1426,36 @@ html.dark .unlink-btn {
   color: var(--color-bg-secondary);
   border-color: var(--color-text-accent);
   font-weight: 600;
+}
+
+/* Photo Section in Modal */
+#photo-section .file-input-label {
+  background-color: #4f46e5;
+  transition: background-color 0.2s;
+}
+#photo-section .file-input-label:hover {
+  background-color: #4338ca;
+}
+
+#photo-content-wrapper img {
+  box-shadow: 0 4px 12px var(--color-shadow-primary);
+}
+
+#photo-content-wrapper .remove-photo-btn {
+  transition: opacity 0.2s;
+}
+#photo-content-wrapper .remove-photo-btn:hover {
+  opacity: 0.8;
+}
+
+/* Spinner for loading states */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.animate-spin {
+  animation: spin 1s linear infinite;
 }
 
 /* AI Analysis Container */

@@ -3,6 +3,7 @@
 // ESTE ARQUIVO AGORA USA A SINTAXE MODULAR MODERNA DO FIREBASE (v9+).
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
 import { getFirestore } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
+import { getStorage } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-storage.js";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -14,7 +15,7 @@ const firebaseConfig = {
   appId: "1:406625730884:web:faad94ac63af1255459711",
 };
 
-let db;
+let db, storage;
 let initializationError = null;
 
 // Verifique se a configuração foi preenchida.
@@ -31,6 +32,7 @@ if (!initializationError) {
   try {
     const app = initializeApp(firebaseConfig);
     db = getFirestore(app);
+    storage = getStorage(app);
   } catch (e) {
     initializationError = e;
     console.error("Erro ao inicializar o Firebase:", e);
@@ -46,4 +48,4 @@ function showFirebaseError() {
     </div>`;
 }
 
-export { db, initializationError, showFirebaseError };
+export { db, storage, initializationError, showFirebaseError };
