@@ -847,6 +847,25 @@ function updateNavigation() {
 }
 
 // --- Restriction Modal Functions ---
+const handlePasteOnModal = async (e) => {
+  if (!modal.classList.contains("active") || !currentOpenItemId) return;
+  const items = (e.clipboardData || window.clipboardData)?.items;
+  if (!items) return;
+
+  let file = null;
+  for (const item of items) {
+    if (item.type.indexOf("image") === 0) {
+      file = item.getAsFile();
+      break;
+    }
+  }
+
+  if (file) {
+    e.preventDefault();
+    await uploadPhoto(file);
+  }
+};
+
 function setupModal() {
   modalCloseBtn.setAttribute("aria-label", "Fechar modal de restrições");
   modal.addEventListener("click", (e) => {
@@ -904,6 +923,7 @@ function openRestrictionsModal(itemId, itemName) {
   modalContent.setAttribute("aria-modal", "true");
   modalContent.setAttribute("aria-labelledby", "modal-item-name");
   modal.classList.add("active");
+  window.addEventListener("paste", handlePasteOnModal);
 
   renderDetailsCard();
 }
@@ -915,6 +935,7 @@ function closeModal() {
     activeTomSelect = null;
   }
   modal.classList.remove("active");
+  window.removeEventListener("paste", handlePasteOnModal);
   if (lastFocusedElement) {
     lastFocusedElement.focus();
     lastFocusedElement = null;
@@ -955,7 +976,6 @@ function renderDetailsCard() {
   // --- Data Gathering ---
   const itemData = findItemInCurrentWeekTree(currentOpenItemId);
 
-  // Dates
   const itemDates = (() => {
     if (
       !itemData ||
@@ -980,7 +1000,6 @@ function renderDetailsCard() {
     };
   })();
 
-  // Balance
   const customValue = customValuesData.get(currentOpenItemId);
   const balance = (() => {
     if (
@@ -993,7 +1012,6 @@ function renderDetailsCard() {
     return null;
   })();
 
-  // Restrictions
   const linkedIds = new Set(
     restrictionLinks
       .filter((l) => l.itemId === currentOpenItemId)
@@ -1008,6 +1026,31 @@ function renderDetailsCard() {
   const resolved = linkedRestrictions
     .filter((r) => r.status === "resolved")
     .sort((a, b) => new Date(b.due) - new Date(a.due));
+
+  // --- HTML Piece Generation ---
+  const infoCardHtml = `
+    <div class="item-info-card">
+        <h3 class="text-lg font-semibold text-primary mb-3">Informações Gerais</h3>
+        <div class="info-grid">
+            <div class="info-grid-item">
+                <span class="info-item-label">Início</span>
+                <span class="info-item-value">${itemDates.start}</span>
+            </div>
+            <div class="info-grid-item">
+                <span class="info-item-label">Término</span>
+                <span class="info-item-value">${itemDates.end}</span>
+            </div>
+            ${
+              balance !== null
+                ? `
+            <div class="info-grid-item">
+                <span class="info-item-label">Saldo Topográfico</span>
+                <span class="info-item-value">${balance}</span>
+            </div>`
+                : ""
+            }
+        </div>
+    </div>`;
 
   const renderList = (list) => {
     if (list.length === 0)
@@ -1047,60 +1090,41 @@ function renderDetailsCard() {
       .join("");
   };
 
-  // --- HTML Rendering ---
-  let infoCardHtml = `
-    <div class="item-info-card">
-        <h3 class="text-lg font-semibold text-primary mb-3">Informações Gerais</h3>
-        <div class="info-grid">
-            <div class="info-grid-item">
-                <span class="info-item-label">Início</span>
-                <span class="info-item-value">${itemDates.start}</span>
+  const restrictionsHtml = `
+     <div>
+        <h3 class="text-lg font-semibold text-primary mb-2">Restrições Vinculadas</h3>
+        <div class="space-y-4">
+            <div>
+                <h4 class="font-medium text-secondary mb-2">Pendentes</h4>
+                <div id="pending-list" class="space-y-2">${renderList(
+                  pending
+                )}</div>
             </div>
-            <div class="info-grid-item">
-                <span class="info-item-label">Término</span>
-                <span class="info-item-value">${itemDates.end}</span>
+            <div>
+                <h4 class="font-medium text-secondary mb-2">Resolvidas</h4>
+                <div id="resolved-list" class="space-y-2">${renderList(
+                  resolved
+                )}</div>
             </div>
-            ${
-              balance !== null
-                ? `
-            <div class="info-grid-item">
-                <span class="info-item-label">Saldo Topográfico</span>
-                <span class="info-item-value">${balance}</span>
-            </div>`
-                : ""
-            }
         </div>
-    </div>`;
+    </div>
+    `;
 
+  // --- Main Layout ---
   modalBody.innerHTML = `
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div id="photo-section" class="mb-6">
+             <h3 class="text-lg font-semibold text-primary mb-3">Foto da Atividade</h3>
+             <div id="photo-content-wrapper" class="bg-tertiary rounded-lg border border-border-primary min-h-[300px] flex items-center justify-center overflow-hidden">
+                ${renderPhotoContent()}
+             </div>
+        </div>
+
+        <div class="space-y-6">
             <div>
                 ${infoCardHtml}
-                <div class="mt-6">
-                    <h3 class="text-lg font-semibold text-primary mb-2">Restrições Vinculadas</h3>
-                    <div class="space-y-4">
-                        <div>
-                            <h4 class="font-medium text-secondary mb-2">Pendentes</h4>
-                            <div id="pending-list" class="space-y-2">${renderList(
-                              pending
-                            )}</div>
-                        </div>
-                        <div>
-                            <h4 class="font-medium text-secondary mb-2">Resolvidas</h4>
-                            <div id="resolved-list" class="space-y-2">${renderList(
-                              resolved
-                            )}</div>
-                        </div>
-                    </div>
-                </div>
             </div>
-             <div>
-                <div id="photo-section">
-                    <h3 class="text-lg font-semibold text-primary mb-3">Foto da Atividade</h3>
-                    <div id="photo-content-wrapper" class="p-4 bg-tertiary rounded-lg border border-border-primary min-h-[200px] flex items-center justify-center">
-                        ${renderPhotoContent()}
-                    </div>
-                </div>
+            <div>
+                ${restrictionsHtml}
                 <div id="add-restriction-section" class="mt-6 pt-6 border-t border-border-primary">
                     <button id="show-add-restriction-form-btn" class="w-full bg-blue-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-blue-700">Adicionar/Vincular Restrição</button>
                     <div id="restriction-form-container" class="hidden">
@@ -1115,13 +1139,48 @@ function renderDetailsCard() {
   document
     .getElementById("show-add-restriction-form-btn")
     .addEventListener("click", renderRestrictionFormContainer);
-  modalBody.addEventListener("click", handleModalActions);
-  modalBody
-    .querySelector("#photo-content-wrapper")
-    .addEventListener("click", handlePhotoClick);
-  modalBody
-    .querySelector("#photo-content-wrapper")
-    .addEventListener("change", handlePhotoChange);
+  modalBody.addEventListener("click", handleModalClick);
+  modalBody.addEventListener("submit", handleModalSubmit);
+
+  const photoWrapper = modalBody.querySelector("#photo-content-wrapper");
+  if (photoWrapper) {
+    photoWrapper.addEventListener("click", handlePhotoClick);
+    photoWrapper.addEventListener("change", handlePhotoChange);
+
+    // Drag & Drop listeners
+    ["dragenter", "dragover", "dragleave", "drop"].forEach((eventName) => {
+      photoWrapper.addEventListener(
+        eventName,
+        (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        },
+        false
+      );
+    });
+    ["dragenter", "dragover"].forEach((eventName) => {
+      photoWrapper.addEventListener(
+        eventName,
+        () => photoWrapper.classList.add("highlight"),
+        false
+      );
+    });
+    ["dragleave", "drop"].forEach((eventName) => {
+      photoWrapper.addEventListener(
+        eventName,
+        () => photoWrapper.classList.remove("highlight"),
+        false
+      );
+    });
+    photoWrapper.addEventListener(
+      "drop",
+      (e) => {
+        const file = e.dataTransfer.files[0];
+        uploadPhoto(file);
+      },
+      false
+    );
+  }
 }
 
 function renderRestrictionFormContainer() {
@@ -1234,80 +1293,7 @@ function renderRestrictionFormContainer() {
     });
 }
 
-async function handleModalActions(e) {
-  const restrictionItem = e.target.closest(".restriction-item");
-  if (!restrictionItem) return;
-
-  const restrictionId = restrictionItem.dataset.restrId;
-  const restriction = restrictionsList.find((r) => r.id === restrictionId);
-  if (!restriction) return;
-
-  if (e.target.classList.contains("toggle-status-btn")) {
-    restriction.status =
-      restriction.status === "pending" ? "resolved" : "pending";
-    await storage.saveData(
-      storage.APP_KEYS.RESTRICTIONS_LIST_KEY,
-      restrictionsList
-    );
-    utils.showToast("Status da restrição alterado.", "success");
-  } else if (e.target.classList.contains("unlink-btn")) {
-    restrictionLinks = restrictionLinks.filter(
-      (l) =>
-        !(l.itemId === currentOpenItemId && l.restrictionId === restrictionId)
-    );
-    await storage.saveData(
-      storage.APP_KEYS.RESTRICTION_LINKS_KEY,
-      restrictionLinks
-    );
-    utils.showToast("Restrição desvinculada.", "success");
-  } else if (e.target.closest("#link-restriction-form")) {
-    e.preventDefault();
-    const selectedId = activeTomSelect.getValue();
-    if (!selectedId) {
-      utils.showToast("Selecione uma restrição para vincular.", "error");
-      return;
-    }
-    restrictionLinks.push({
-      restrictionId: selectedId,
-      itemId: currentOpenItemId,
-    });
-    await storage.saveData(
-      storage.APP_KEYS.RESTRICTION_LINKS_KEY,
-      restrictionLinks
-    );
-    utils.showToast("Restrição vinculada com sucesso.", "success");
-    activeTomSelect.destroy();
-    activeTomSelect = null;
-  } else if (e.target.closest("#add-restriction-form")) {
-    e.preventDefault();
-    const newId = uuidv4();
-    const newRestriction = {
-      id: newId,
-      desc: document.getElementById("restr-desc").value.trim(),
-      resp: document.getElementById("restr-resp").value.trim(),
-      due: document.getElementById("restr-due").value.trim(),
-      category: document.getElementById("restr-category").value || null,
-      status: "pending",
-    };
-    if (!newRestriction.desc || !newRestriction.resp || !newRestriction.due) {
-      utils.showToast("Preencha todos os campos da nova restrição.", "error");
-      return;
-    }
-    restrictionsList.push(newRestriction);
-    restrictionLinks.push({ restrictionId: newId, itemId: currentOpenItemId });
-    await Promise.all([
-      storage.saveData(
-        storage.APP_KEYS.RESTRICTIONS_LIST_KEY,
-        restrictionsList
-      ),
-      storage.saveData(
-        storage.APP_KEYS.RESTRICTION_LINKS_KEY,
-        restrictionLinks
-      ),
-    ]);
-    utils.showToast("Nova restrição adicionada e vinculada.", "success");
-  }
-
+async function updateAndRerender() {
   // Common logic for all actions: update maps and re-render
   itemRestrictionInfoMap.clear();
   restrictionLinks.forEach((link) => {
@@ -1336,6 +1322,90 @@ async function handleModalActions(e) {
   await renderCurrentWeekView();
 }
 
+async function handleModalSubmit(e) {
+  e.preventDefault(); // Prevent default form submission for all forms in modal
+  const form = e.target;
+
+  if (form.id === "link-restriction-form") {
+    const selectedId = activeTomSelect.getValue();
+    if (!selectedId) {
+      utils.showToast("Selecione uma restrição para vincular.", "error");
+      return;
+    }
+    restrictionLinks.push({
+      restrictionId: selectedId,
+      itemId: currentOpenItemId,
+    });
+    await storage.saveData(
+      storage.APP_KEYS.RESTRICTION_LINKS_KEY,
+      restrictionLinks
+    );
+    utils.showToast("Restrição vinculada com sucesso.", "success");
+    activeTomSelect.destroy();
+    activeTomSelect = null;
+    await updateAndRerender();
+  } else if (form.id === "add-restriction-form") {
+    const newId = uuidv4();
+    const newRestriction = {
+      id: newId,
+      desc: document.getElementById("restr-desc").value.trim(),
+      resp: document.getElementById("restr-resp").value.trim(),
+      due: document.getElementById("restr-due").value.trim(),
+      category: document.getElementById("restr-category").value || null,
+      status: "pending",
+    };
+    if (!newRestriction.desc || !newRestriction.resp || !newRestriction.due) {
+      utils.showToast("Preencha todos os campos da nova restrição.", "error");
+      return;
+    }
+    restrictionsList.push(newRestriction);
+    restrictionLinks.push({ restrictionId: newId, itemId: currentOpenItemId });
+    await Promise.all([
+      storage.saveData(
+        storage.APP_KEYS.RESTRICTIONS_LIST_KEY,
+        restrictionsList
+      ),
+      storage.saveData(
+        storage.APP_KEYS.RESTRICTION_LINKS_KEY,
+        restrictionLinks
+      ),
+    ]);
+    utils.showToast("Nova restrição adicionada e vinculada.", "success");
+    await updateAndRerender();
+  }
+}
+
+async function handleModalClick(e) {
+  const restrictionItem = e.target.closest(".restriction-item");
+  if (!restrictionItem) return;
+
+  const restrictionId = restrictionItem.dataset.restrId;
+  const restriction = restrictionsList.find((r) => r.id === restrictionId);
+  if (!restriction) return;
+
+  if (e.target.classList.contains("toggle-status-btn")) {
+    restriction.status =
+      restriction.status === "pending" ? "resolved" : "pending";
+    await storage.saveData(
+      storage.APP_KEYS.RESTRICTIONS_LIST_KEY,
+      restrictionsList
+    );
+    utils.showToast("Status da restrição alterado.", "success");
+  } else if (e.target.classList.contains("unlink-btn")) {
+    restrictionLinks = restrictionLinks.filter(
+      (l) =>
+        !(l.itemId === currentOpenItemId && l.restrictionId === restrictionId)
+    );
+    await storage.saveData(
+      storage.APP_KEYS.RESTRICTION_LINKS_KEY,
+      restrictionLinks
+    );
+    utils.showToast("Restrição desvinculada.", "success");
+  }
+
+  await updateAndRerender();
+}
+
 // --- Photo Management Functions ---
 
 function renderPhotoContent() {
@@ -1344,8 +1414,8 @@ function renderPhotoContent() {
   const media = activityMediaMap.get(currentOpenItemId);
   if (media?.imageUrl) {
     return `
-      <div class="relative group">
-        <img src="${media.imageUrl}" alt="Foto da atividade" class="max-h-[300px] max-w-full rounded-lg object-contain">
+      <div class="relative group h-full w-full">
+        <img src="${media.imageUrl}" alt="Foto da atividade" class="w-full h-full object-cover">
         <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all flex items-center justify-center rounded-lg">
             <button class="remove-photo-btn hidden group-hover:block px-4 py-2 bg-red-600 text-white rounded-md text-sm font-semibold">Remover Foto</button>
         </div>
@@ -1353,9 +1423,9 @@ function renderPhotoContent() {
     `;
   } else {
     return `
-      <div id="photo-upload-area" class="text-center">
-        <p class="text-tertiary mb-4">Nenhuma foto para este item.</p>
-        <label for="photo-file-input" class="file-input-label cursor-pointer">Adicionar Foto</label>
+      <div id="photo-upload-area" class="text-center p-4">
+        <p class="text-tertiary mb-4">Arraste uma imagem, cole (Ctrl+V), ou</p>
+        <label for="photo-file-input" class="file-input-label cursor-pointer">Selecione um Arquivo</label>
         <input type="file" id="photo-file-input" class="sr-only" accept="image/png, image/jpeg, image/gif">
       </div>
     `;
@@ -1368,16 +1438,22 @@ function handlePhotoClick(e) {
   }
 }
 
-async function handlePhotoChange(e) {
+function handlePhotoChange(e) {
   if (e.target.id !== "photo-file-input") return;
-
   const file = e.target.files[0];
+  uploadPhoto(file);
+}
+
+async function uploadPhoto(file) {
   if (!file || !currentOpenItemId) return;
+  if (!file.type.startsWith("image/")) {
+    utils.showToast("Por favor, envie um arquivo de imagem.", "error");
+    return;
+  }
 
   const wrapper = document.getElementById("photo-content-wrapper");
   if (!wrapper) return;
 
-  // Show a loading state
   wrapper.innerHTML = `
       <div class="flex flex-col items-center gap-2 text-primary">
           <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -1387,7 +1463,6 @@ async function handlePhotoChange(e) {
 
   try {
     const existingMedia = activityMediaMap.get(currentOpenItemId);
-    // If a photo already exists, delete it from Firebase Storage first
     if (existingMedia?.storagePath) {
       const oldStorageRef = ref(firebaseStorage, existingMedia.storagePath);
       await deleteObject(oldStorageRef).catch((err) =>
@@ -1399,11 +1474,9 @@ async function handlePhotoChange(e) {
     const storagePath = `activity_photos/${currentOpenItemId}_${Date.now()}.${fileExtension}`;
     const storageRef = ref(firebaseStorage, storagePath);
 
-    // Upload the new file
     const snapshot = await uploadBytes(storageRef, file);
     const downloadURL = await getDownloadURL(snapshot.ref);
 
-    // Save metadata to Firestore
     const mediaData = {
       imageUrl: downloadURL,
       storagePath: storagePath,
@@ -1411,17 +1484,14 @@ async function handlePhotoChange(e) {
     };
     await storage.saveActivityMedia(currentOpenItemId, mediaData);
 
-    // Update local state
     activityMediaMap.set(currentOpenItemId, mediaData);
 
-    // Re-render the photo content and the main week view to show the badge
     wrapper.innerHTML = renderPhotoContent();
     await renderCurrentWeekView();
     utils.showToast("Foto enviada com sucesso!", "success");
   } catch (error) {
     console.error("Erro no upload da foto:", error);
     utils.showToast(`Falha no upload: ${error.message}`, "error");
-    // Restore original upload button on error
     wrapper.innerHTML = renderPhotoContent();
   }
 }
@@ -1450,13 +1520,10 @@ async function handleRemovePhoto() {
       await deleteObject(storageRef);
     }
 
-    // Delete from Firestore
     await storage.deleteActivityMedia(currentOpenItemId);
 
-    // Update local state
     activityMediaMap.delete(currentOpenItemId);
 
-    // Re-render
     wrapper.innerHTML = renderPhotoContent();
     await renderCurrentWeekView();
     utils.showToast("Foto removida.", "success");
