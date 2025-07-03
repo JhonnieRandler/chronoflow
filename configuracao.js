@@ -232,6 +232,7 @@ async function renderGroupEditForm(groupName = null) {
       text: `${task.task_code} - ${task.task_name}`,
     }))
     .sort((a, b) => a.text.localeCompare(b.text));
+  const selectEl = document.getElementById("activity-group-select");
   const tomSelect = new TomSelect(selectEl, {
     options,
     plugins: ["remove_button"],
