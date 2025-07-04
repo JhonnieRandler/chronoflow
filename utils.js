@@ -34,6 +34,11 @@ export function insertHeader() {
       text: "Configurações",
       icon: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-gear" viewBox="0 0 16 16"><path d="M8 4.754a3.246 3.246 0 1 0 0 6.492 3.246 3.246 0 0 0 0-6.492M5.754 8a2.246 2.246 0 1 1 4.492 0 2.246 2.246 0 0 1-4.492 0"/><path d="M9.796 1.343c-.527-1.79-3.065-1.79-3.592 0l-.094.319a.873.873 0 0 1-1.255.52l-.292-.16c-1.64-.892-3.433.902-2.54 2.541l.159.292a.873.873 0 0 1-.52 1.255l-.319.094c-1.79.527-1.79 3.065 0 3.592l.319.094a.873.873 0 0 1 .52 1.255l-.16.292c-.892 1.64.901 3.434 2.541 2.54l.292-.159a.873.873 0 0 1 1.255.52l.094.319c.527 1.79 3.065 1.79 3.592 0l.094-.319a.873.873 0 0 1 1.255-.52l.292.16c1.64.893 3.434-.902 2.54-2.541l-.159-.292a.873.873 0 0 1 .52-1.255l.319-.094c1.79-.527 1.79-3.065 0-3.592l-.319-.094a.873.873 0 0 1-.52-1.255l.16-.292c.893-1.64-.902-3.433-2.541-2.54l-.292.159a.873.873 0 0 1-1.255-.52zm-2.633.283c.246-.835 1.428-.835 1.674 0l.094.319a1.873 1.873 0 0 0 2.693 1.115l.291-.16c.764-.415 1.6.42 1.184 1.185l-.159.292a1.873 1.873 0 0 0 1.116 2.692l.318.094c.835.246.835 1.428 0 1.674l-.319.094a1.873 1.873 0 0 0-1.115 2.693l.16.291c.415.764-.42 1.6-1.185 1.184l-.291-.159a1.873 1.873 0 0 0-2.693 1.116l-.094.318c-.246.835-1.428.835-1.674 0l-.094-.319a1.873 1.873 0 0 0-2.692-1.115l-.292.16c-.764.415-1.6-.42-1.184-1.185l.159-.291A1.873 1.873 0 0 0 1.945 8.93l-.319-.094c-.835-.246-.835-1.428 0-1.674l.319-.094A1.873 1.873 0 0 0 3.06 4.377l-.16-.292c-.415-.764.42-1.6 1.185-1.184l.292.159a1.873 1.873 0 0 0 2.692-1.115z"/></svg>',
     },
+    {
+      href: "#presentation-mode",
+      text: "Modo Apresentação",
+      icon: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9M20.25 20.25h-4.5m4.5 0v-4.5m0 4.5L15 15" /></svg>',
+    },
   ];
 
   let currentPage = window.location.pathname.split("/").pop();
@@ -117,14 +122,14 @@ export function insertHeader() {
     verticalNav.classList.add("is-open");
     backdrop.classList.add("is-visible");
     mobileMenuToggle.setAttribute("aria-expanded", "true");
-    document.body.style.overflow = "hidden";
+    document.body.classList.add("modal-open");
   }
 
   function closeSidebar() {
     verticalNav.classList.remove("is-open");
     backdrop.classList.remove("is-visible");
     mobileMenuToggle.setAttribute("aria-expanded", "false");
-    document.body.style.overflow = "";
+    document.body.classList.remove("modal-open");
   }
 
   mobileMenuToggle.addEventListener("click", openSidebar);
@@ -158,6 +163,52 @@ export function insertHeader() {
   // Apply saved theme on initial load
   const savedTheme = localStorage.getItem("theme") || "light";
   applyTheme(savedTheme);
+
+  // --- Presentation Mode Logic ---
+  const presentationBtn = document.querySelector(
+    'a[href="#presentation-mode"]'
+  );
+  if (presentationBtn) {
+    // Create the exit button dynamically but keep it hidden
+    const exitBtn = document.createElement("button");
+    exitBtn.id = "exit-presentation-btn";
+    exitBtn.className = "exit-presentation-btn";
+    exitBtn.style.display = "none";
+    exitBtn.setAttribute("aria-label", "Sair do modo apresentação");
+    exitBtn.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
+          </svg>
+          <span>Sair do Modo Apresentação</span>
+      `;
+    document.body.appendChild(exitBtn);
+
+    const togglePresentationMode = (activate) => {
+      document.body.classList.toggle("presentation-mode", activate);
+      exitBtn.style.display = activate ? "flex" : "none";
+      if (activate && verticalNav.classList.contains("is-open")) {
+        closeSidebar();
+      }
+    };
+
+    presentationBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      togglePresentationMode(true);
+    });
+
+    exitBtn.addEventListener("click", () => {
+      togglePresentationMode(false);
+    });
+
+    window.addEventListener("keydown", (e) => {
+      if (
+        e.key === "Escape" &&
+        document.body.classList.contains("presentation-mode")
+      ) {
+        togglePresentationMode(false);
+      }
+    });
+  }
 }
 
 /**
@@ -306,4 +357,17 @@ export function getWbsPathObjects(stableIdRef, wbsMap) {
     currentId = currentWbs.parent_stable_wbs_id;
   }
   return path;
+}
+
+/**
+ * Generates a version 4 UUID.
+ * @returns {string} A new UUID.
+ */
+export function uuidv4() {
+  return ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, (c) =>
+    (
+      c ^
+      (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (c / 4)))
+    ).toString(16)
+  );
 }

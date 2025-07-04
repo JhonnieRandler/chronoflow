@@ -120,7 +120,7 @@ const PRED_TYPE_MAP = {
           lastRecalcDate
         )}).`;
 
-    populateTaskSelect();
+    await populateTaskSelect();
     taskSelectorSkeleton.classList.add("hidden");
     taskSelectorWrapper.classList.remove("hidden");
   } catch (e) {
@@ -130,19 +130,27 @@ const PRED_TYPE_MAP = {
   }
 })();
 
-function populateTaskSelect() {
+async function populateTaskSelect() {
   if (tomSelectInstance) tomSelectInstance.destroy();
+
   const tasks = projectBase?.TASK?.rows || [];
-  const taskOptions = tasks.map((t) => ({
-    value: t.task_code,
-    text: `${t.task_code} - ${t.task_name}`,
-    type: "task",
-  }));
-  const groupOptions = activityMapping.map((group) => ({
-    value: `group::${group.groupName}`,
+  const mapping = await storage.getData(storage.APP_KEYS.ACTIVITY_MAPPING_KEY);
+  const groupedTaskCodes = new Set(mapping.flatMap((g) => g.taskCodes));
+
+  const taskOptions = tasks
+    .filter((t) => !groupedTaskCodes.has(t.task_code))
+    .map((t) => ({
+      value: t.task_code,
+      text: `${t.task_code} - ${t.task_name}`,
+      type: "task",
+    }));
+
+  const groupOptions = mapping.map((group) => ({
+    value: `group::${group.groupId}`,
     text: `[Grupo] ${group.groupName}`,
     type: "group",
   }));
+
   const allOptions = [...taskOptions, ...groupOptions].sort((a, b) =>
     a.text.localeCompare(b.text)
   );
@@ -221,7 +229,7 @@ function renderGenuineValuesCard(itemId) {
   const progress = planned > 0 ? (actual / planned) * 100 : 0;
 
   return `
-            <div class="card p-6genuine-card">
+            <div class="card genuine-card p-6">
                 <h2 class="text-xl font-bold text-yellow-800 mb-4">Análise de Valores Topográficos</h2>
                 <div class="info-grid">
                     <div class="info-item genuine-item">
@@ -506,9 +514,9 @@ function renderResourceChart(weeklyData, sortedWeeks) {
   });
 }
 
-function displayGroupAnalysis(groupId) {
-  const groupName = groupId.replace("group::", "");
-  const group = activityMapping.find((g) => g.groupName === groupName);
+function displayGroupAnalysis(fullGroupId) {
+  const groupId = fullGroupId.replace("group::", "");
+  const group = activityMapping.find((g) => g.groupId === groupId);
   if (!group) return;
 
   const latestVersion = projectVersions[latestVersionId];
@@ -516,7 +524,7 @@ function displayGroupAnalysis(groupId) {
     group.taskCodes.includes(t.task_code)
   );
   if (tasksInGroup.length === 0) {
-    analysisOutput.innerHTML = `<div class="message-box">Nenhuma atividade para o grupo "${groupName}" no projeto.</div>`;
+    analysisOutput.innerHTML = `<div class="message-box">Nenhuma atividade para o grupo "${group.groupName}" no projeto.</div>`;
     return;
   }
 
@@ -585,7 +593,9 @@ function displayGroupAnalysis(groupId) {
 
   let html = `
         <div class="card p-6 bg-secondary">
-            <div class="flex justify-between items-start mb-4"><h2 class="text-2xl font-bold text-primary">${groupName}</h2><span class="badge status-group">Grupo de Atividades</span></div>
+            <div class="flex justify-between items-start mb-4"><h2 class="text-2xl font-bold text-primary">${
+              group.groupName
+            }</h2><span class="badge status-group">Grupo de Atividades</span></div>
             <div class="info-grid">
                  <div class="info-item"><span class="info-item-label">Início Planejado (Agregado)</span><span class="info-item-value">${utils.formatBrazilianDate(
                    aggregatedDates.target_start_date
@@ -605,7 +615,7 @@ function displayGroupAnalysis(groupId) {
             <h3 class="text-xl font-bold text-primary mb-4">Quantidades Consolidadas por Recurso (Cronograma da Semana)</h3>
              <div class="table-container"><table><thead><tr><th>Recurso</th><th class="text-right">Total Planejado</th><th class="text-right">Total Realizado</th><th class="text-right">Total Restante</th><th class="text-right">% Progresso</th></tr></thead><tbody>${resourcesHtml}</tbody></table></div>
         </div>
-        ${renderGenuineValuesCard(groupId)}
+        ${renderGenuineValuesCard(fullGroupId)}
         <div class="card p-6 bg-secondary">
             <h3 class="text-xl font-bold text-primary mb-4">Atividades no Grupo</h3>
             <div class="table-container"><table><thead><tr><th>Código</th><th>Nome</th><th>Status</th><th class="text-right">Qtd. Planejada</th><th>Início</th><th>Término</th></tr></thead><tbody>

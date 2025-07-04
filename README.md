@@ -4,145 +4,141 @@ Este documento detalha a finalidade, a arquitetura, o fluxo de uso e os algoritm
 
 ## 🌟 1. Finalidade do Projeto
 
-O objetivo do ChronoFlow é transformar dados brutos de arquivos `.xer` em dashboards interativos e intuitivos, simplificando a análise de cronogramas e recursos. A ferramenta permite não apenas visualizar os dados do P6, mas também sobrepô-los com valores personalizados (ex: medições topográficas) e gerenciar proativamente as restrições do projeto. O sistema foi projetado para facilitar uma gestão de projeto ágil, visual e informada, eliminando a necessidade de planilhas complexas e análises manuais.
+O objetivo do ChronoFlow é transformar dados brutos de arquivos `.xer` em dashboards interativos e intuitivos, simplificando a análise de cronogramas e recursos. A ferramenta permite não apenas visualizar os dados do P6, mas também sobrepô-los com valores personalizados (ex: medições topográficas), gerenciar proativamente as restrições do projeto e registrar evidências visuais através de fotos. O sistema foi projetado para facilitar uma gestão de projeto ágil, visual e informada, eliminando a necessidade de planilhas complexas e análises manuais.
 
 ## 💾 2. Arquitetura e Fluxo de Dados
 
-O sistema é uma aplicação web moderna que roda inteiramente no navegador, utilizando **Firebase Cloud Firestore** para persistência de dados. A arquitetura foi projetada para máxima eficiência e escalabilidade, refletindo o fluxo de trabalho de um projeto contínuo que recebe atualizações semanais.
+O sistema é uma aplicação web moderna que roda inteiramente no navegador, utilizando **Firebase Cloud Firestore** para persistência de dados de configuração e **Firebase Storage** para armazenamento de arquivos de mídia. A arquitetura foi projetada para máxima eficiência e escalabilidade.
 
 ### Estrutura de Dados Otimizada no Firestore
 
-Para evitar redundância e garantir performance, os dados são organizados em três coleções principais:
+Para evitar redundância e garantir performance, os dados são organizados em quatro coleções principais:
 
-1.  **`p6-app-data` (Configurações Globais):** Armazena todas as configurações da aplicação que são independentes do projeto, como mapeamento de semanas, recurso principal, agrupamentos, etc. As configurações de restrições também ficam aqui, de forma normalizada.
+1.  **`p6-app-data` (Configurações Globais):** Armazena todas as configurações da aplicação que são independentes do projeto, como mapeamento de semanas, recurso principal, agrupamentos e a lista centralizada de restrições.
+2.  **`project_base` (Dados Estáticos do Projeto):** Contém os dados fundamentais do projeto que raramente mudam. Esta coleção terá **apenas um documento**, representando o esqueleto do cronograma (`TASK`, `RSRC`, `WBS_HIERARCHY`, etc.).
+3.  **`project_versions` (Avanço Semanal):** Cada documento nesta coleção é um "snapshot" do projeto, correspondente a um arquivo `.xer` carregado. Contém apenas os dados que mudam a cada semana (`TASKRSRC`, `TASKPRED`).
+4.  **`activity_media` (Metadados de Mídia):** Armazena os metadados das fotos enviadas, como a URL de download e o caminho no Firebase Storage, vinculando cada foto a uma atividade ou grupo específico.
 
-2.  **`project_base` (Dados Estáticos do Projeto):** Contém os dados fundamentais do projeto que raramente ou nunca mudam. Esta coleção terá **apenas um documento**, representando o esqueleto do cronograma. As tabelas salvas aqui são `TASK`, `RSRC`, `WBS_HIERARCHY`, etc.
-
-3.  **`project_versions` (Avanço Semanal):** Cada documento nesta coleção é um "snapshot" ou uma "versão" do projeto, correspondente a um arquivo `.xer` carregado. Contém apenas os dados que mudam a cada semana, como `TASKRSRC` (o avanço dos recursos) e `TASKPRED`.
-
-> **Vantagem Principal:** Em vez de salvar o cronograma inteiro (muitos megabytes) toda semana, salvamos apenas alguns kilobytes de dados de avanço. Isso torna o sistema mais rápido, mais barato e imensamente mais escalável.
+> **Vantagem Principal:** Em vez de salvar o cronograma inteiro (megabytes) toda semana, salvamos apenas alguns kilobytes de dados de avanço. Isso torna o sistema mais rápido, mais barato e imensamente mais escalável.
 
 ### Fluxo de Trabalho Recomendado
 
 1.  **📤 Upload e Processamento (`index.html`):** O usuário envia um arquivo `.xer` atualizado.
-    - **Primeiro Upload:** O sistema detecta que não há dados base e salva as tabelas estáticas (`TASK`, `RSRC`, etc.) na coleção `project_base`.
-    - **Uploads Subsequentes:** O sistema reconhece que os dados base já existem e salva apenas as tabelas de avanço (`TASKRSRC`, `TASKPRED`) como uma nova versão em `project_versions`.
-2.  **⚙️ Configuração (`configuracao.html`):** O usuário parametriza como os dados serão analisados. As configurações são aplicadas sobre os dados base e as versões.
-3.  **📈 Análise e Visualização:** As páginas de análise (`proximas_semanas.html`, `analise_atividade.html`) carregam os dados base e as versões relevantes, combinando-os em tempo real para apresentar uma visão completa e atualizada.
-4.  **📦 Backup (`configuracao.html`):** O usuário exporta todos os dados (configurações, base e versões) para um arquivo `.json`, garantindo a segurança e portabilidade.
+    - **Primeiro Upload:** O sistema salva as tabelas estáticas (`TASK`, `RSRC`) na coleção `project_base`.
+    - **Uploads Subsequentes:** O sistema salva apenas as tabelas de avanço (`TASKRSRC`, `TASKPRED`) como uma nova versão em `project_versions`.
+2.  **⚙️ Configuração (`configuracao.html`):** O usuário parametriza como os dados serão analisados.
+3.  **🖼️ Gestão de Atividades (`proximas_semanas.html`):** O usuário pode **adicionar uma foto** a uma atividade ou grupo. A imagem é enviada para o **Firebase Storage**, e sua URL é salva no **Firestore** (`activity_media`).
+4.  **📈 Análise e Visualização:** As páginas de análise carregam os dados base e as versões relevantes, combinando-os em tempo real com as configurações, restrições e fotos para apresentar uma visão completa.
+5.  **📦 Backup (`configuracao.html`):** O usuário exporta todos os dados (configurações, base, versões e metadados de mídia) para um arquivo `.json`.
 
 ## 📄 3. Detalhamento das Páginas e Funcionalidades
 
-Todas as páginas contam com uma **barra de navegação lateral**, fixa e responsiva, que é injetada dinamicamente pelo script `utils.js` para garantir uma experiência de usuário coesa.
-
-### `index.html` (Painel Principal e Processador de Dados)
+### `index.html` (Painel Principal)
 
 A porta de entrada do sistema. Sua função mais importante é processar os dados brutos de forma inteligente.
 
 - **Interface de Upload:** Permite o envio de arquivos `.xer` via seletor ou drag-and-drop.
-- **Lógica Principal (`transformData()`):** Esta função é o coração do sistema, responsável por transformar dados crus em informação estruturada.
-  - **Criação da Hierarquia WBS:** Constrói um **ID estável (`stable_wbs_id`)** para cada item da WBS (EAP), que consiste no caminho completo do item (ex: `PROJETO > ÁREA 1 > EDIFÍCIO A`). Isso é vital para que os relacionamentos hierárquicos se mantenham íntegros.
-  - **Enriquecimento de Dados:** IDs técnicos (de predecessoras, recursos, etc.) são "traduzidos" para seus nomes e códigos legíveis.
+- **Lógica Principal (`transformData()`):** Transforma dados crus em informação estruturada, criando uma hierarquia WBS estável e enriquecendo os dados.
 
 ### `configuracao.html` (Painel de Configurações)
 
-Centraliza todas as parametrizações da aplicação através de uma interface de modais.
+Centraliza todas as parametrizações da aplicação.
 
-- **Gerenciamento de Restrições:**
-  - **Centralizado:** Permite criar, editar e excluir todas as restrições do projeto em um único local.
-  - **Muitos-para-Muitos:** Uma mesma restrição (ex: "Atraso na liberação de engenharia") pode ser vinculada a múltiplas atividades ou grupos, refletindo a realidade de projetos complexos.
-- **Mapeamento de Atividades:** Permite criar **grupos lógicos de atividades**. Por exemplo, "Escavação Bloco A - Etapa 1" e "Escavação Bloco A - Etapa 2" podem ser agrupados como "Escavação Bloco A". A lógica impede que uma mesma atividade pertença a múltiplos grupos.
-- **Valores Personalizados:** Permite ao usuário inserir valores "Previsto" e "Realizado" que se **sobrepõem** aos do cronograma. Pode ser aplicado a atividades individuais ou a grupos. Ideal para registrar medições de campo (topografia, engenharia) que refletem o avanço real.
-- **Importar & Exportar:** Utiliza o módulo `storage.js` para criar um backup (`.json`) com a estrutura completa das coleções `p6-app-data`, `project_base` e `project_versions`, garantindo a segurança e portabilidade.
+- **Mapeamento de Atividades:** Permite criar **grupos lógicos de atividades**.
+  - **Herança e Consolidação de Grupos:** Ao salvar um grupo, o sistema **automaticamente agrega os dados** das atividades-membro. Valores (como de topografia) são somados, restrições são unificadas e a primeira foto encontrada é herdada. Os dados originais são removidos das atividades individuais para evitar duplicidade.
+  - **Interface Simplificada:** Uma vez que uma atividade faz parte de um grupo, ela **desaparece de todas as caixas de seleção da aplicação**. O gerenciamento é feito diretamente no grupo, tornando a interface mais limpa e focada.
+  - **IDs Estáveis:** Cada grupo recebe um **ID único e imutável (UUID)**. Isso garante que, ao **renomear um grupo**, todos os seus vínculos com restrições, fotos e valores personalizados permaneçam intactos.
+  - **Migração Automática:** Um script de migração único e automático atualiza os dados antigos (que usavam o nome como ID) para o novo formato de ID estável, garantindo a integridade dos dados existentes.
+- **Valores Personalizados:** Permite ao usuário inserir valores "Previsto" e "Realizado" (ex: de topografia) que se sobrepõem aos do cronograma.
+- **Importar & Exportar:** Utiliza o módulo `storage.js` para criar um backup (`.json`) com a estrutura completa de todas as coleções, **incluindo os metadados das fotos**, garantindo a segurança e portabilidade.
 
 ### `proximas_semanas.html` (6-Week Look Ahead)
 
-Esta página é uma ferramenta interativa de planejamento proativo, projetada para ser o centro das reuniões de **6WLA (Six Week Look Ahead)**.
+Ferramenta interativa de planejamento proativo, ideal para reuniões de 6WLA.
 
-- **Navegação em Carrossel:** Exibe uma semana por vez, permitindo focar no horizonte de tempo relevante.
-- **Gerenciamento de Restrições:** Clicar em qualquer atividade abre um modal dedicado onde a equipe pode:
-  - **Adicionar** uma nova restrição e vinculá-la imediatamente.
-  - **Vincular** uma restrição já existente no sistema à atividade em análise.
-  - **Desvincular** um impedimento de uma atividade sem excluí-lo.
-- **Indicadores Visuais:** Atividades com restrições pendentes são marcadas com um emblema de bandeira (🚩), chamando atenção imediata para os pontos que necessitam de ação.
+- **Gerenciamento de Atividades no Modal:** Clicar em qualquer atividade abre um modal redesenhado e mais amplo.
+  - **Foto em Destaque:** O modal exibe uma **foto da atividade** em destaque no topo, permitindo análise visual imediata.
+  - **Upload de Múltiplas Formas:** O usuário pode adicionar ou atualizar a foto de três maneiras ágeis:
+    1.  Clicando para **selecionar o arquivo**.
+    2.  **Arrastando e soltando** a imagem na área da foto.
+    3.  **Colando** uma imagem da área de transferência (`Ctrl+V`).
+  - **Visualizador em Tela Cheia:** Clicar na foto a abre em um visualizador de tela cheia para análise detalhada.
+- **Indicadores Visuais:**
+  - **🚩 Restrições Pendentes:** Atividades com impedimentos são marcadas com uma bandeira.
+  - **📸 Foto Anexada:** Atividades com fotos são marcadas com um ícone de câmera.
 
 ### `analise_atividade.html` (Análise Detalhada)
 
-Oferece uma visão profunda e comparativa de uma atividade ou grupo.
+Oferece uma visão profunda e comparativa de uma atividade ou grupo, incluindo um card especial para valores topográficos e um gráfico de evolução de recursos.
 
-- **Busca Híbrida:** Permite buscar e analisar tanto atividades individuais quanto grupos.
-- **Card de Análise Topográfica:** Se o item selecionado possui valores personalizados, um card especial e destacado exibe o previsto, realizado, saldo e o percentual de avanço com base nesses valores, permitindo uma **comparação direta e imediata** entre o avanço do cronograma e o avanço medido em campo.
-- **Gráfico de Evolução:** Mostra a evolução histórica de recursos para atividades individuais, consolidando dados de todas as `project_versions` salvas.
+## ✨ 4. Comunicação e Apresentação
 
-### `visualizador.html` (Visualizador de Tabelas)
+Para facilitar a comunicação e o uso da ferramenta em reuniões de equipe, foram adicionadas funcionalidades que transformam o ChronoFlow em uma plataforma de apresentação.
 
-Ferramenta de utilidade para desenvolvedores e usuários avançados que precisam inspecionar os dados brutos ou transformados armazenados no sistema, ideal para depuração e verificação de integridade.
+### Modo Apresentação
 
-## ✨ 4. Novas Funcionalidades e Melhorias
+Um novo item "Modo Apresentação" foi adicionado ao menu de navegação. Ao ativá-lo, todos os elementos da interface (como o menu lateral) são ocultados, e o conteúdo principal é expandido para preencher toda a tela. Isso cria uma visão limpa e focada, ideal para projetar durante reuniões de planejamento, garantindo que a atenção de todos esteja nos dados. O modo pode ser facilmente desativado pressionando a tecla `Escape` ou clicando no botão flutuante que aparece no canto da tela.
 
-O ChronoFlow evoluiu para oferecer uma experiência de usuário mais moderna, performática e agradável.
+## 🖼️ 5. Gerenciamento de Fotos de Atividades
 
-### 🚀 Experiência do Usuário (UX) Aprimorada
+- **Armazenamento Seguro:** As imagens são salvas no **Firebase Storage**, uma solução robusta e escalável do Google.
+- **Vínculo com Dados:** As informações das fotos (URL, caminho de armazenamento) são salvas no **Firestore**, garantindo o vínculo com a atividade ou grupo correto.
+- **Interface Intuitiva:** O upload é facilitado com suporte a **arrastar e soltar (drag-and-drop)** e a capacidade de **colar imagens da área de transferência**.
+- **Visualização Aprimorada:** As fotos são exibidas em destaque nos detalhes da atividade e podem ser abertas em um **visualizador de tela cheia**.
 
-- **Feedback Visual Imediato:** Ações assíncronas, como salvar ou importar dados, agora desabilitam os botões de ação e exibem um estado de "Salvando...", prevenindo cliques duplicados e informando claramente ao usuário que o sistema está trabalhando.
-- **Notificações "Toast":** Mensagens de sucesso ou erro agora aparecem como notificações "toast" discretas no canto da tela, que desaparecem sozinhas, proporcionando um feedback não-intrusivo.
-- **"Skeleton Loaders":** As mensagens de texto "Carregando..." foram substituídas por animações "skeleton" (esqueleto da interface), que melhoram a percepção de velocidade e tornam o carregamento de dados mais agradável.
+## 🛠️ 6. Arquitetura Robusta com IDs Estáveis
 
-### ⚡ Performance Otimizada
+- **O Problema Resolvido:** Anteriormente, a identidade de um grupo de atividades estava atrelada ao seu nome. Renomear um grupo quebrava todos os vínculos de dados (restrições, valores, fotos).
+- **A Solução:** Cada grupo agora possui um **ID único e imutável (UUID)**, que é usado para todas as referências internas. Isso permite que os nomes dos grupos sejam alterados livremente sem risco de perda de dados. Uma **migração automática** garante a atualização dos dados existentes sem intervenção manual.
 
-- **Carregamento Sob Demanda no 6WLA:** A página "6-Week Look Ahead" agora utiliza uma estratégia de "lazy loading". Em vez de processar os dados de todas as 6 semanas de uma vez, os dados são processados e renderizados sob demanda, apenas quando o usuário navega para uma semana específica. Isso resulta em um carregamento inicial da página drasticamente mais rápido, especialmente em projetos grandes.
+## 🚀 7. Experiência do Usuário (UX) Aprimorada
 
-## 🎨 5. Design System e Estilização
+- **Sem "Flash" de Conteúdo (FOUC):** Foi implementado um script de bloqueio de renderização no `<head>` de todas as páginas. Ele aplica o tema (claro ou escuro) salvo no `localStorage` instantaneamente, antes da página ser desenhada, eliminando o piscar da interface.
+- **Feedback Visual Imediato:** Ações assíncronas, como salvar ou importar dados, desabilitam os botões e exibem um estado de "Salvando...".
+- **Notificações "Toast":** Mensagens de sucesso ou erro aparecem como notificações discretas que desaparecem sozinhas.
+- **"Skeleton Loaders":** Animações de "esqueleto" substituem as mensagens de "Carregando...", melhorando a percepção de velocidade.
 
-Para garantir uma interface coesa, moderna e de fácil manutenção, o ChronoFlow adota uma arquitetura de estilização bem definida.
+## 🎨 8. Design System e Estilização
 
-### 5.1. Tema Noturno e Variáveis CSS
+### 8.1. Tema Claro e Escuro (Light/Dark Mode)
 
-- **Funcionalidade:** Um tema escuro completo e esteticamente agradável foi implementado em toda a aplicação para melhorar o conforto visual em ambientes com pouca luz e reduzir o cansaço ocular.
-- **Persistência:** A escolha do tema (claro ou escuro) é salva no `localStorage` do navegador, mantendo a preferência do usuário entre as visitas.
-- **Implementação:** A tematização é controlada por variáveis CSS definidas no `:root`. A classe `.dark` no `<html>` ativa um conjunto diferente de valores para essas variáveis, alterando instantaneamente a aparência de toda a aplicação.
+- **Funcionalidade:** Um tema escuro completo foi implementado para melhorar o conforto visual. A escolha do tema é salva no `localStorage`.
+- **Implementação:** A tematização é controlada por variáveis CSS. A classe `.dark` no `<html>` ativa um conjunto diferente de valores para essas variáveis, alterando a aparência de toda a aplicação. Para evitar o "flash" de conteúdo sem estilo (FOUC), um script no `<head>` aplica a classe `.dark` antes da renderização da página.
 
-### 5.2. Arquitetura de CSS Semântico (Convivência com Tailwind)
+### 8.2. Arquitetura de CSS Semântico
 
-- **O Problema:** Durante a implementação, foi identificado um conflito de especificidade com o script do Tailwind CSS. O Tailwind, ao ser executado no cliente, injetava suas classes de utilitário (`text-gray-600`, etc.) no HTML após o nosso `styles.css`, fazendo com que as regras do Tailwind sobrescrevessem as customizações para o modo escuro.
-- **A Solução:** Em vez de lutar contra a especificidade do Tailwind, a arquitetura foi refatorada para trabalhar em harmonia com ele. Foram criadas **classes semânticas** (ex: `.text-primary`, `.bg-secondary`) em `styles.css`. Essas classes utilizam as variáveis de cor do tema (`--color-text-primary`, `--color-bg-secondary`). Nos arquivos HTML e templates JavaScript, as classes de cor do Tailwind foram substituídas por essas novas classes semânticas.
-- **Benefícios:** Esta abordagem elimina o conflito de ordem de carregamento, torna o HTML mais legível e garante que o sistema de temas funcione de forma robusta e previsível. A manutenção das cores é centralizada nas variáveis CSS, facilitando futuros ajustes de design.
+- **O Problema:** O Tailwind CSS, por ser injetado no cliente, sobrescrevia as customizações para o modo escuro.
+- **A Solução:** Foram criadas **classes semânticas** (ex: `.text-primary`, `.bg-secondary`) que utilizam as variáveis de cor do tema. Essas classes substituem as classes de cor do Tailwind nos arquivos HTML e templates JavaScript, garantindo que o sistema de temas funcione de forma robusta e previsível.
 
-## ♿️ 6. Acessibilidade (A11y)
+## ♿️ 9. Acessibilidade (A11y)
 
-Um grande esforço foi dedicado para tornar o ChronoFlow uma ferramenta acessível e utilizável por todos.
+Um grande esforço foi dedicado para tornar o ChronoFlow uma ferramenta acessível.
 
-- **Navegação Completa por Teclado:** Toda a aplicação é 100% operável utilizando apenas o teclado. Elementos interativos como botões, links e campos de formulário são alcançáveis via `Tab`, e podem ser ativados com `Enter` ou `Espaço`.
+- **Navegação Completa por Teclado:** Toda a aplicação é 100% operável utilizando apenas o teclado.
 - **Gerenciamento de Foco Inteligente:**
-  - **"Focus Trap" em Modais:** Quando um modal é aberto, o foco do teclado fica "preso" dentro dele, impedindo a navegação acidental para elementos da página ao fundo. Ao fechar, o foco retorna para o elemento que o abriu.
-  - **Indicador de Foco Visível:** Um anel de foco claro e consistente (`outline`) aparece em todos os elementos interativos durante a navegação por teclado, garantindo que o usuário sempre saiba onde está.
-  - **Navegação Consciente de Contexto:** Na página "6WLA", a navegação por `Tab` agora ignora de forma inteligente os itens que estão dentro de um grupo WBS recolhido, proporcionando uma experiência mais limpa e lógica.
-- **Suporte a Leitores de Tela (ARIA):**
-  - **Rótulos e Papéis:** Atributos ARIA (Accessible Rich Internet Applications) como `aria-label`, `role` e `aria-current` são utilizados para dar contexto e significado a ícones, botões e menus, descrevendo a interface para tecnologias assistivas.
-  - **Anúncios Dinâmicos:** "Live regions" (`aria-live`) são usadas para anunciar vocalmente as notificações "toast" e as mudanças de estado de carregamento de dados, mantendo os usuários de leitores de tela informados sobre o que está acontecendo na aplicação.
+  - **"Focus Trap" em Modais:** Quando um modal é aberto, o foco do teclado fica "preso" dentro dele. Ao fechar, o foco retorna para o elemento que o abriu.
+  - **Indicador de Foco Visível:** Um anel de foco claro e consistente (`outline`) aparece em todos os elementos interativos.
+- **Suporte a Leitores de Tela (ARIA):** Atributos ARIA (`aria-label`, `role`, etc.) são usados para dar contexto e significado à interface. "Live regions" (`aria-live`) anunciam vocalmente as notificações e mudanças de estado.
 
-## 🔒 7. Segurança
+## 🔒 10. Segurança
 
-É crucial entender como a segurança funciona em uma aplicação como o ChronoFlow, que roda inteiramente no navegador do cliente (client-side).
+É crucial entender como a segurança funciona em uma aplicação que roda inteiramente no navegador do cliente (client-side).
 
-### 7.1. As Chaves em `firebase-config.js` são Públicas por Design
+### 10.1. As Chaves em `firebase-config.js` são Públicas por Design
 
-Você notará que o arquivo `firebase-config.js` contém chaves de configuração do seu projeto Firebase. É importante saber que **essas chaves não são segredos**. Elas são identificadores públicos que o Google utiliza para direcionar as requisições do seu aplicativo para o projeto Firebase correto. Qualquer pessoa que visitar o seu site poderá ver essas chaves.
+As chaves no arquivo `firebase-config.js` **não são segredos**. Elas são identificadores públicos que o Google utiliza para direcionar as requisições para o projeto Firebase correto. Qualquer pessoa que visitar o seu site poderá ver essas chaves.
 
-Tentar "esconder" essas chaves usando variáveis de ambiente ou segredos do GitHub **não é aplicável nem eficaz** para uma aplicação client-side.
+### 10.2. A Segurança Real está nas **Firebase Security Rules**
 
-### 7.2. A Segurança Real está nas **Firebase Security Rules**
+A verdadeira proteção dos seus dados é feita através das **Regras de Segurança do Firebase**, configuradas no painel do seu projeto. Elas definem quem pode ler e escrever no seu banco de dados e no seu armazenamento de arquivos.
 
-A verdadeira proteção dos seus dados não está em ocultar as chaves de configuração, mas sim em definir quem pode ler e escrever no seu banco de dados. Isso é feito através das **Regras de Segurança do Firebase (Firebase Security Rules)**, que são configuradas diretamente no painel do seu projeto Firebase.
-
-**Exemplo:** Se você quiser que apenas usuários autenticados possam ler e escrever dados, você usaria uma regra como esta:
+**Exemplo:** Para permitir acesso apenas a usuários autenticados:
 
 ```json
 // No painel do Firebase -> Firestore Database -> Rules
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Permite leitura e escrita apenas se o usuário estiver logado.
     match /{document=**} {
       allow read, write: if request.auth != null;
     }
@@ -150,78 +146,50 @@ service cloud.firestore {
 }
 ```
 
-Com esta regra, mesmo que alguém copie suas chaves do `firebase-config.js`, não conseguirá acessar ou modificar seus dados, pois não estará autenticado na sua aplicação.
-
 > **Recomendação Forte:** Sempre configure suas Regras de Segurança para serem o mais restritivas possível, garantindo a proteção e a integridade dos seus dados.
 
-## 🧠 8. Lógicas e Algoritmos Principais (Para Desenvolvedores)
+## 🧠 11. Lógicas e Algoritmos Principais
 
 Esta seção detalha as implementações-chave que sustentam as funcionalidades do sistema.
 
-### 8.1. Camada de Abstração de Dados (`storage.js`)
+### 11.1. Camada de Abstração de Dados (`storage.js`)
 
-- **Objetivo:** Centralizar e abstrair toda a interação com o **Firebase Cloud Firestore**. Esta é a mudança arquitetural mais importante, pois desacopla a lógica da aplicação da implementação do banco de dados.
-- **Novas Funções:**
-  - `getProjectBase()`: Busca o único documento da coleção `project_base`.
-  - `saveProjectBase()`: Salva os dados estáticos do projeto.
-  - `getProjectVersions()`: Busca todos os documentos da coleção `project_versions`.
-  - `saveProjectVersion()`: Salva um novo documento de avanço semanal.
-- **Benefícios:**
+- **Objetivo:** Centralizar e abstrair toda a interação com o **Firebase Cloud Firestore**. Isso desacopla a lógica da aplicação da implementação do banco de dados, tornando o código mais limpo e fácil de manter. Se a tecnologia de banco de dados mudar no futuro, apenas `storage.js` precisará ser reescrito.
 
-  - **Ponto Único de Modificação:** Toda a lógica do Firestore reside aqui. Se no futuro a aplicação precisar usar outra tecnologia de banco de dados, apenas `storage.js` precisará ser reescrito.
-  - **Gerenciamento da Assincronicidade:** O módulo lida com a natureza assíncrona das chamadas de rede para o Firestore, retornando `Promises`.
-  - **Robustez:** A função `getData` retorna valores padrão seguros, prevenindo erros de `null` ou `undefined`.
-  - **API Simplificada:** As páginas da aplicação consomem uma API semântica e de alto nível, sem se preocupar com a complexidade do Firestore.
+### 11.2. Processamento de Arquivos XER (`xer-parser.js`)
 
-  ```javascript
-  // Exemplo de uso nas páginas da aplicação
-  const projectBase = await storage.getProjectBase();
-  const allVersions = await storage.getProjectVersions();
-  const latestVersionId = utils.getLatestProjectId(allVersions);
-  const latestProjectData = { ...projectBase, ...allVersions[latestVersionId] };
-  ```
+- **Objetivo:** Isolar a lógica complexa de análise e transformação de arquivos `.xer` em um módulo dedicado.
+- **Implementação:** O arquivo `xer-parser.js` exporta uma função principal que recebe o conteúdo de um arquivo `.xer` e executa duas etapas:
+  1.  **`parseXER()`:** Lê o texto bruto e o converte em um objeto JavaScript estruturado, com tabelas, cabeçalhos e linhas.
+  2.  **`transformData()`:** Pega os dados brutos analisados e os enriquece, criando IDs de WBS estáveis, resolvendo chaves estrangeiras (como IDs de recursos e predecessoras) e adicionando campos calculados necessários para a aplicação.
+- **Benefício:** Esta separação limpa o arquivo `index.js`, que agora apenas orquestra o upload e chama este módulo, seguindo o princípio da responsabilidade única.
 
-### 8.2. Processamento do `.XER` e Criação da Hierarquia Estável
+### 11.3. Migração para IDs de Grupo Estáveis (UUIDs)
 
-- **Função Principal:** `transformData()` em `index.js`.
-- **Problema:** Os IDs de WBS (`wbs_id`) no Primavera P6 são numéricos e podem mudar. Usá-los como referência direta levaria a inconsistências.
-- **Solução:** Foi criado um **ID Estável (`stable_wbs_id`)**. O algoritmo percorre recursivamente a árvore hierárquica de cada item da WBS, concatenando os nomes de cada nível para formar um caminho legível e único (ex: `"Projeto X > Área Y > Disciplina Z"`). Este caminho se torna a chave primária para a hierarquia.
+- **Objetivo:** Garantir a integridade dos dados ao renomear grupos.
+- **Problema:** Usar o nome de um grupo como seu ID é frágil. Se o nome muda, todos os dados vinculados (restrições, fotos, valores) se perdem.
+- **Solução:**
+  1.  **Geração de UUID:** Ao criar um grupo, a função `utils.uuidv4()` gera um ID único e imutável.
+  2.  **Vinculação por ID:** Todas as outras partes do sistema usam este UUID para se referir ao grupo.
+  3.  **Script de Migração:** Em `configuracao.js`, a função `migrateToGroupIds()` verifica se existem grupos no formato antigo. Se sim, ela gera UUIDs para eles, atualiza todos os dados vinculados nas coleções `restrictionLinks`, `customActivityValues` e `activity_media`, e recarrega a página. Essa verificação é rápida e a migração completa só ocorre uma vez.
 
-### 8.3. Modelo de Dados de Restrições Normalizado
+### 11.4. Gerenciamento de Mídia com Firebase Storage
 
-- **Objetivo:** Permitir que uma restrição seja vinculada a múltiplas atividades (relação muitos-para-muitos).
-- **Implementação (`storage.js`):**
-  - `RESTRICTIONS_LIST_KEY`: Armazena uma lista central de todos os objetos de restrição únicos `{id, desc, resp, due, status}`.
-  - `RESTRICTION_LINKS_KEY`: Armazena os vínculos, com objetos do tipo `{restrictionId, itemId}`.
-- **Vantagem:** Este modelo normalizado evita a duplicação de dados, é mais escalável e permite a gestão centralizada das restrições.
+- **Objetivo:** Permitir o upload, armazenamento e exclusão seguros de fotos de atividades.
+- **Implementação (`proximas_semanas.js`):**
+  1.  **Upload:** A função `uploadPhoto` recebe um arquivo. Ela primeiro exclui a foto antiga (se existir) do Firebase Storage. Em seguida, ela faz o upload do novo arquivo para um caminho único (ex: `activity_photos/ITEM_ID_TIMESTAMP.jpg`).
+  2.  **Obtenção da URL:** Após o upload, `getDownloadURL` retorna uma URL pública e permanente para a imagem.
+  3.  **Salvamento no Firestore:** Esta URL e o caminho do arquivo são salvos na coleção `activity_media` usando `storage.saveActivityMedia`, vinculando a foto ao `itemId`.
+  4.  **Exclusão:** `handleRemovePhoto` exclui o arquivo do Firebase Storage e o documento de metadados do Firestore.
 
-### 8.4. Geração da Visão Hierárquica no Dashboard Semanal
+### 11.5. Geração da Visão Hierárquica no Dashboard Semanal
 
 - **Função Principal:** `buildGroupedTreeRecursive()` em `proximas_semanas.js`.
 - **Objetivo:** Montar a estrutura de árvore aninhada das atividades com base nos níveis de WBS que o usuário selecionou na configuração.
-- **Implementação:** A função recebe uma atividade, um array dos níveis de WBS para agrupar (ex: `[1, 3]`) e a árvore de dados da semana. De forma recursiva, ela "desce" pela árvore, usando o `stable_wbs_id` da atividade para encontrar o nó correspondente em cada nível e inserir a atividade na folha correta.
-- **Otimização:** Para melhorar a performance, os dados de cada semana são processados e cacheados sob demanda ("lazy loading"), apenas na primeira vez que o usuário navega para ela.
+- **Otimização:** Os dados de cada semana são processados e cacheados sob demanda ("lazy loading"), apenas na primeira vez que o usuário navega para ela.
 
-### 8.5. Animação Robusta de Hierarquias Retráteis
+## 🚀 12. Melhorias Futuras
 
-- **O Problema:** Animar a altura de elementos aninhados é um desafio. Uma abordagem ingênua falha devido a "condições de corrida" na renderização do navegador, resultando em conteúdo cortado ou saltos na animação.
-- **A Solução: Reação em Cadeia com `transitionend`**
-  - Implementamos uma lógica que se sincroniza com o ciclo de renderização do navegador.
-  1.  A animação de um "filho" é iniciada.
-  2.  Um listener de evento `transitionend` aguarda o término da animação.
-  3.  Ao terminar, o código notifica o "pai", que recalcula sua própria altura e inicia sua própria animação de redimensionamento.
-  4.  Esse processo se repete recursivamente para cima, garantindo uma experiência de usuário fluida e sem falhas visuais.
-
-### 8.6. Gestão de Foco para Acessibilidade
-
-- **"Focus Trap":** Uma função reutilizável monitora os eventos de teclado (`Tab`) quando um modal está ativo. Ela calcula a lista de elementos focáveis dentro do modal e "prende" a navegação a essa lista, redirecionando o foco do último para o primeiro elemento (e vice-versa), garantindo uma experiência de teclado contínua e acessível.
-- **Foco Inteligente:** A lógica de expansão/recolhimento das seções WBS também gerencia o atributo `tabindex` dos elementos internos, removendo da ordem de navegação os itens que não estão visíveis.
-
-## 🚀 9. Melhorias Futuras
-
-O ChronoFlow foi projetado para ser uma plataforma robusta e evolutiva. Algumas melhorias planejadas para o futuro incluem:
-
-- **📄 Geração de Relatórios em PDF:** Criar uma funcionalidade para exportar as visualizações principais (como o card de uma semana do 6WLA) para um arquivo PDF limpo e profissional, facilitando o compartilhamento e a impressão.
-- **🤖 Análise Inteligente com IA:** Integrar a API do Google Gemini para oferecer análises proativas. Por exemplo, ao gerenciar restrições, a IA poderia sugerir um plano de ação concreto para mitigar os riscos identificados.
-- **🔗 Integração com APIs:** Explorar a possibilidade de se conectar diretamente a APIs de sistemas de planejamento (como o próprio P6, se disponível) para automatizar o processo de upload de dados.
-- **🔧 Dashboards Personalizáveis:** Permitir que os usuários criem seus próprios dashboards, selecionando os gráficos e indicadores mais relevantes para suas necessidades.
+- **🤖 Análise Inteligente com IA:** Integrar a API do Google Gemini para oferecer análises proativas, como sugerir planos de ação para mitigar restrições.
+- **🔗 Integração com APIs:** Conectar-se diretamente a APIs de sistemas de planejamento para automatizar o upload de dados.
+- **🔧 Dashboards Personalizáveis:** Permitir que os usuários criem seus próprios dashboards.

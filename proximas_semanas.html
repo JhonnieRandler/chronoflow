@@ -225,7 +225,7 @@
 
     <!-- Modal de Restrições -->
     <div id="restriction-modal" class="modal-overlay">
-      <div class="modal-content modal-large bg-secondary">
+      <div class="modal-content bg-secondary">
         <div
           class="flex-shrink-0 px-6 sm:px-8 pt-6 pb-4 border-b border-gray-200"
         >
@@ -248,7 +248,28 @@
       </div>
     </div>
 
+    <!-- Fullscreen Image Viewer -->
+    <div
+      id="fullscreen-viewer"
+      class="fullscreen-viewer-overlay hidden"
+      aria-live="polite"
+      aria-modal="true"
+    >
+      <button
+        id="fullscreen-close-btn"
+        class="fullscreen-close-btn"
+        aria-label="Fechar visualizador de imagem"
+      >
+        &times;
+      </button>
+      <img
+        id="fullscreen-image"
+        src=""
+        alt="Visualização de imagem em tela cheia"
+      />
+    </div>
+
     <!-- App Scripts as a module -->
-    <script type="module" src="proximas_semanas.js"></script>
+    <script type="module" src="proximas_semanas.js" defer></script>
   </body>
 </html>

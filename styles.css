@@ -863,6 +863,12 @@ html.dark .main-resource-row {
   transition: opacity 0.3s ease, visibility 0.3s ease;
 }
 
+@media (min-width: 768px) {
+  .modal-overlay {
+    left: var(--sidebar-width-collapsed);
+  }
+}
+
 .modal-overlay.active {
   opacity: 1;
   visibility: visible;
@@ -881,7 +887,7 @@ html.dark .main-resource-row {
 }
 
 .modal-overlay.modal-large .modal-content {
-  max-width: 1280px;
+  max-width: 1440px;
   height: 95vh;
 }
 
@@ -1306,12 +1312,6 @@ html.dark .filter-btn-restrictions.active {
   border: 1px solid var(--color-border-primary);
 }
 
-.info-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
-}
-
 .info-grid-item .info-item-label {
   display: block;
   font-size: 0.875rem;
@@ -1329,10 +1329,6 @@ html.dark .filter-btn-restrictions.active {
   padding: 1rem;
   border: 1px solid var(--color-border-primary);
   border-radius: 0.5rem;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 1rem;
   transition: background-color 0.2s ease;
 }
 
@@ -1480,4 +1476,111 @@ html.dark #ai-output-container textarea {
   background-color: #374151;
   color: #f9fafb;
   border-color: #4b5563;
+}
+
+/* --- Fullscreen Photo Viewer --- */
+.photo-viewer-clickable {
+  cursor: pointer;
+}
+
+.fullscreen-viewer-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 4000;
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.fullscreen-viewer-overlay.hidden {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.fullscreen-viewer-overlay img {
+  max-width: 90vw;
+  max-height: 90vh;
+  object-fit: contain;
+  box-shadow: 0 0 2rem rgba(0, 0, 0, 0.5);
+  border-radius: 0.25rem;
+}
+
+.fullscreen-close-btn {
+  position: absolute;
+  top: 1rem;
+  right: 1.5rem;
+  font-size: 2.5rem;
+  color: white;
+  background: none;
+  border: none;
+  cursor: pointer;
+  line-height: 1;
+  text-shadow: 0 0 5px black;
+  transition: transform 0.2s ease;
+}
+
+.fullscreen-close-btn:hover {
+  transform: scale(1.1);
+}
+
+body.modal-open {
+  overflow: hidden;
+}
+
+/* --- Presentation Mode --- */
+body.presentation-mode .vertical-nav,
+body.presentation-mode .mobile-menu-toggle {
+  display: none !important;
+}
+
+body.presentation-mode .main-content {
+  margin-left: 0 !important;
+  width: 100% !important;
+  height: 100vh;
+  padding: 0;
+}
+
+/* Make main page containers fill height in presentation mode */
+body.presentation-mode .main-container,
+body.presentation-mode .config-page-container,
+body.presentation-mode .analysis-page-container {
+  max-width: 100%;
+  height: 100%;
+  padding: 1rem;
+}
+
+body.presentation-mode .carousel-container .nav-button.prev-btn {
+  left: 0.5rem;
+}
+
+.exit-presentation-btn {
+  position: fixed;
+  bottom: 1.25rem;
+  right: 1.25rem;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background-color: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+  padding: 0.5rem 1rem;
+  border-radius: 9999px;
+  font-weight: 500;
+  font-size: 0.875rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--color-border-primary);
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+.exit-presentation-btn:hover {
+  transform: scale(1.05);
+}
+
+.exit-presentation-btn svg {
+  width: 1.25rem;
+  height: 1.25rem;
 }

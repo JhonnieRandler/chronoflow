@@ -40,6 +40,10 @@ const modalItemName = document.getElementById("modal-item-name");
 const modalBody = document.getElementById("modal-body");
 const modalCloseBtn = document.getElementById("modal-close-btn");
 
+const fullscreenViewer = document.getElementById("fullscreen-viewer");
+const fullscreenImage = document.getElementById("fullscreen-image");
+const fullscreenCloseBtn = document.getElementById("fullscreen-close-btn");
+
 let fullTaskList = [],
   weeksData = [],
   upcomingWeeks = [],
@@ -60,15 +64,6 @@ let currentOpenItemId = null;
 let projectName = "Projeto";
 let activeTomSelect = null;
 let lastFocusedElement = null; // For accessibility
-
-function uuidv4() {
-  return ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, (c) =>
-    (
-      c ^
-      (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (c / 4)))
-    ).toString(16)
-  );
-}
 
 (async () => {
   try {
@@ -178,6 +173,7 @@ function uuidv4() {
       tasksInGroup.forEach((task, index) => {
         activityStageMap.set(task.task_code, {
           groupName: group.groupName,
+          groupId: group.groupId,
           stage: index + 1,
           totalStages: tasksInGroup.length,
         });
@@ -189,6 +185,7 @@ function uuidv4() {
     await renderCurrentWeekView();
     setupEventListeners();
     setupModal();
+    setupFullscreenViewer();
   } catch (e) {
     console.error(e);
     dashboardOutput.innerHTML = `<div class="message-box" role="alert" style="color: #b91c1c;">Erro: ${e.message}</div>`;
@@ -253,9 +250,14 @@ async function processAndCacheWeekData(weekNumber) {
     let tag = startWeek === weekNumber ? "Início" : "";
     if (endWeek === weekNumber) tag = tag ? "Início e Fim" : "Fim";
 
-    const groupName = activityStageMap.get(task.task_code)?.groupName;
-    const item = groupName
-      ? { type: "group", groupName, task: { ...task, tag } }
+    const groupInfo = activityStageMap.get(task.task_code);
+    const item = groupInfo
+      ? {
+          type: "group",
+          groupName: groupInfo.groupName,
+          groupId: groupInfo.groupId,
+          task: { ...task, tag },
+        }
       : { type: "task", task: { ...task, tag } };
 
     buildGroupedTreeRecursive(item, groupingLevels, groupedByWeek[weekNumber]);
@@ -263,7 +265,7 @@ async function processAndCacheWeekData(weekNumber) {
 }
 
 function buildGroupedTreeRecursive(item, levels, currentTree) {
-  const { type, task, groupName } = item;
+  const { type, task, groupName, groupId } = item;
   const [currentLevelToGroup, ...remainingLevels] = levels;
   if (!currentLevelToGroup) return;
   const wbsNodeAtLevel = task.wbsPath.find(
@@ -281,11 +283,11 @@ function buildGroupedTreeRecursive(item, levels, currentTree) {
         children: {},
         items: new Map(),
       };
-    const itemKey = type === "group" ? groupName : task.task_code;
+    const itemKey = type === "group" ? groupId : task.task_code;
     if (!currentTree[groupKey].items.has(itemKey))
       currentTree[groupKey].items.set(itemKey, {
         type,
-        data: type === "group" ? { groupName } : task,
+        data: type === "group" ? { groupName, groupId } : task,
         relatedTasks: [],
       });
     currentTree[groupKey].items.get(itemKey).relatedTasks.push(task);
@@ -299,11 +301,11 @@ function buildGroupedTreeRecursive(item, levels, currentTree) {
       items: new Map(),
     };
   if (remainingLevels.length === 0) {
-    const itemKey = type === "group" ? groupName : task.task_code;
+    const itemKey = type === "group" ? groupId : task.task_code;
     if (!currentTree[groupKey].items.has(itemKey))
       currentTree[groupKey].items.set(itemKey, {
         type,
-        data: type === "group" ? { groupName } : task,
+        data: type === "group" ? { groupName, groupId } : task,
         relatedTasks: [],
       });
     currentTree[groupKey].items.get(itemKey).relatedTasks.push(task);
@@ -319,7 +321,7 @@ function buildGroupedTreeRecursive(item, levels, currentTree) {
 function itemMatchesFilter(item) {
   const itemId =
     item.type === "group"
-      ? `group::${item.data.groupName}`
+      ? `group::${item.data.groupId}`
       : item.relatedTasks[0].task_code;
 
   if (currentFilter === "restrictions") {
@@ -381,7 +383,7 @@ async function renderCurrentWeekView() {
       for (const item of node.items.values()) {
         const itemId =
           item.type === "group"
-            ? `group::${item.data.groupName}`
+            ? `group::${item.data.groupId}`
             : item.relatedTasks[0].task_code;
         const restrictionInfo = itemRestrictionInfoMap.get(itemId);
         if (restrictionInfo?.hasPending) {
@@ -499,7 +501,7 @@ async function renderCurrentWeekView() {
 
           const itemId =
             item.type === "group"
-              ? `group::${item.data.groupName}`
+              ? `group::${item.data.groupId}`
               : item.relatedTasks[0].task_code;
           const itemName =
             item.type === "group"
@@ -595,7 +597,9 @@ async function renderCurrentWeekView() {
                     </h3>
                     <p class="text-base font-normal text-tertiary mt-1">${dateRange}</p>
                   </div>
-                  <button id="toggle-all-btn" data-state="collapsed" class="text-sm p-2 rounded-md toggle-all-button self-center md:self-auto mt-2 md:mt-0">Expandir Tudo</button>
+                  <div class="flex items-center gap-2 self-center md:self-auto mt-2 md:mt-0">
+                    <button class="toggle-all-button text-sm p-2 rounded-md" data-state="collapsed">Expandir Tudo</button>
+                  </div>
               </div>
               ${weekContent}
             </div>`;
@@ -617,7 +621,7 @@ async function renderCurrentWeekView() {
   });
 
   document
-    .getElementById("toggle-all-btn")
+    .querySelector(".toggle-all-button")
     ?.addEventListener("click", toggleAllWbs);
   updateNavigation();
 }
@@ -679,7 +683,7 @@ function toggleAllWbs(event) {
   });
 
   btn.dataset.state = isExpanding ? "expanded" : "collapsed";
-  btn.textContent = isExpanding ? "Minimizar Tudo" : "Minimizar Tudo";
+  btn.textContent = isExpanding ? "Minimizar Tudo" : "Expandir Tudo";
 }
 
 async function expandAllWbs() {
@@ -692,7 +696,7 @@ async function expandAllWbs() {
       toggleWbsContent(button);
     }
   });
-  const toggleAllBtn = document.getElementById("toggle-all-btn");
+  const toggleAllBtn = document.querySelector(".toggle-all-button");
   if (toggleAllBtn) {
     toggleAllBtn.dataset.state = "expanded";
     toggleAllBtn.textContent = "Minimizar Tudo";
@@ -759,6 +763,7 @@ function setupEventListeners() {
     const toggleTitle = e.target.closest(".wbs-title");
     if (toggleTitle) {
       toggleWbsContent(toggleTitle);
+      return;
     }
 
     const itemEntry = e.target.closest(".item-entry[data-item-id]");
@@ -767,6 +772,7 @@ function setupEventListeners() {
         itemEntry.dataset.itemId,
         itemEntry.dataset.itemName
       );
+      return;
     }
   });
 
@@ -846,7 +852,279 @@ function updateNavigation() {
     });
 }
 
-// --- Restriction Modal Functions ---
+// --- Modal Functions ---
+
+function _renderPhotoSectionForModal() {
+  return `
+    <div id="photo-section" class="mb-6">
+         <h3 class="text-lg font-semibold text-primary mb-3">Foto da Atividade</h3>
+         <div id="photo-content-wrapper" class="bg-tertiary rounded-lg border border-border-primary min-h-[300px] flex items-center justify-center overflow-hidden">
+            ${renderPhotoContent()}
+         </div>
+    </div>
+    `;
+}
+
+function _renderInfoCardForModal(itemData) {
+  const { relatedTasks } = itemData || {};
+  if (!relatedTasks || relatedTasks.length === 0) {
+    return `<div class="item-info-card"><h3 class="text-lg font-semibold text-primary mb-3">Informações Gerais</h3><p class="text-tertiary">Nenhuma tarefa encontrada para este item.</p></div>`;
+  }
+
+  // Calculate Planned Dates
+  const plannedDates = (() => {
+    const dates = relatedTasks
+      .map((task) => ({
+        start: task.target_start_date
+          ? new Date(task.target_start_date.replace(" ", "T"))
+          : null,
+        end: task.target_end_date
+          ? new Date(task.target_end_date.replace(" ", "T"))
+          : null,
+      }))
+      .filter((d) => d.start && d.end);
+
+    if (dates.length === 0) return { start: "N/A", end: "N/A" };
+
+    const minStart = new Date(Math.min(...dates.map((d) => d.start.getTime())));
+    const maxEnd = new Date(Math.max(...dates.map((d) => d.end.getTime())));
+    return {
+      start: utils.formatBrazilianDate(minStart),
+      end: utils.formatBrazilianDate(maxEnd),
+    };
+  })();
+
+  // Calculate Actual/Forecast Dates
+  const trendDates = (() => {
+    const dates = relatedTasks
+      .map((task) => ({
+        start:
+          task.act_start_date || task.restart_date
+            ? new Date(
+                (task.act_start_date || task.restart_date).replace(" ", "T")
+              )
+            : null,
+        end:
+          task.act_end_date || task.reend_date || task.target_end_date
+            ? new Date(
+                (
+                  task.act_end_date ||
+                  task.reend_date ||
+                  task.target_end_date
+                ).replace(" ", "T")
+              )
+            : null,
+      }))
+      .filter((d) => d.start && d.end);
+
+    if (dates.length === 0)
+      return {
+        start: "N/A",
+        end: "N/A",
+        startLabel: "Início (Tendência)",
+        endLabel: "Término (Tendência)",
+      };
+
+    const minStart = new Date(Math.min(...dates.map((d) => d.start.getTime())));
+    const maxEnd = new Date(Math.max(...dates.map((d) => d.end.getTime())));
+
+    const hasActualStart = relatedTasks.some((t) => t.act_start_date);
+    const hasActualEnd = relatedTasks.every((t) => t.act_end_date);
+
+    return {
+      start: utils.formatBrazilianDate(minStart),
+      end: utils.formatBrazilianDate(maxEnd),
+      startLabel: hasActualStart ? "Início Real" : "Início (Tendência)",
+      endLabel: hasActualEnd ? "Término Real" : "Término (Tendência)",
+    };
+  })();
+
+  const customValue = customValuesData.get(currentOpenItemId);
+  const balance = (() => {
+    if (
+      customValue &&
+      (customValue.planned !== null || customValue.actual !== null)
+    ) {
+      const remaining = (customValue.planned || 0) - (customValue.actual || 0);
+      return utils.formatNumberBR(remaining);
+    }
+    return null;
+  })();
+
+  return `
+    <div class="item-info-card">
+        <h3 class="text-lg font-semibold text-primary mb-3">Informações Gerais</h3>
+        <div class="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+            <div class="info-grid-item">
+                <span class="info-item-label">Início Planejado</span>
+                <span class="info-item-value">${plannedDates.start}</span>
+            </div>
+            <div class="info-grid-item">
+                <span class="info-item-label">Término Planejado</span>
+                <span class="info-item-value">${plannedDates.end}</span>
+            </div>
+            <div class="info-grid-item">
+                <span class="info-item-label">${trendDates.startLabel}</span>
+                <span class="info-item-value">${trendDates.start}</span>
+            </div>
+            <div class="info-grid-item">
+                <span class="info-item-label">${trendDates.endLabel}</span>
+                <span class="info-item-value">${trendDates.end}</span>
+            </div>
+            ${
+              balance !== null
+                ? `
+            <div class="info-grid-item col-span-1 sm:col-span-2 lg:col-span-4">
+                <span class="info-item-label">Saldo Topográfico</span>
+                <span class="info-item-value">${balance}</span>
+            </div>`
+                : ""
+            }
+        </div>
+    </div>`;
+}
+
+function _renderRestrictionsSectionForModal() {
+  const linkedIds = new Set(
+    restrictionLinks
+      .filter((l) => l.itemId === currentOpenItemId)
+      .map((l) => l.restrictionId)
+  );
+  const linkedRestrictions = restrictionsList.filter((r) =>
+    linkedIds.has(r.id)
+  );
+  const pending = linkedRestrictions
+    .filter((r) => r.status === "pending")
+    .sort((a, b) => new Date(a.due) - new Date(b.due));
+  const resolved = linkedRestrictions
+    .filter((r) => r.status === "resolved")
+    .sort((a, b) => new Date(b.due) - new Date(a.due));
+
+  const renderList = (list) => {
+    if (list.length === 0)
+      return '<p class="text-tertiary italic text-center py-4">Nenhuma.</p>';
+    return list
+      .map(
+        (r) => `
+          <div class="restriction-item status-${
+            r.status
+          } flex flex-col md:flex-row md:items-center md:justify-between gap-4" data-restr-id="${
+          r.id
+        }">
+              <div class="flex-grow">
+                  <div class="flex items-center gap-2 mb-1">
+                      ${
+                        r.category
+                          ? `<span class="restriction-category-badge">${r.category}</span>`
+                          : ""
+                      }
+                      <p class="font-medium text-primary">${r.desc}</p>
+                  </div>
+                  <p class="text-sm text-tertiary mt-1">
+                      <span class="font-semibold">Resp:</span> ${r.resp} | 
+                      <span class="font-semibold">Prazo:</span> ${utils.formatBrazilianDate(
+                        r.due
+                      )}
+                  </p>
+              </div>
+              <div class="restriction-actions self-end md:self-center">
+                  <button class="action-btn toggle-status-btn">${
+                    r.status === "pending" ? "Resolver" : "Reabrir"
+                  }</button>
+                  <button class="action-btn unlink-btn text-yellow-600">Desvincular</button>
+              </div>
+          </div>`
+      )
+      .join("");
+  };
+
+  return `
+    <div>
+      <h3 class="text-lg font-semibold text-primary mb-2">Restrições Vinculadas</h3>
+      <div class="space-y-4">
+          <div>
+              <h4 class="font-medium text-secondary mb-2">Pendentes</h4>
+              <div id="pending-list" class="space-y-2">${renderList(
+                pending
+              )}</div>
+          </div>
+          <div>
+              <h4 class="font-medium text-secondary mb-2">Resolvidas</h4>
+              <div id="resolved-list" class="space-y-2">${renderList(
+                resolved
+              )}</div>
+          </div>
+      </div>
+    </div>
+    <div id="add-restriction-section" class="mt-6 pt-6 border-t border-border-primary">
+        <button id="show-add-restriction-form-btn" class="w-full bg-blue-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-blue-700">Adicionar/Vincular Restrição</button>
+        <div id="restriction-form-container" class="hidden">
+            <!-- Form will be rendered here -->
+        </div>
+    </div>`;
+}
+
+function renderDetailsCard() {
+  if (!currentOpenItemId) return;
+
+  const itemData = findItemInCurrentWeekTree(currentOpenItemId);
+
+  modalBody.innerHTML = `
+    ${_renderPhotoSectionForModal()}
+    <div class="space-y-6">
+        <div>
+            ${_renderInfoCardForModal(itemData)}
+        </div>
+        <div>
+            ${_renderRestrictionsSectionForModal()}
+        </div>
+    </div>
+  `;
+
+  document
+    .getElementById("show-add-restriction-form-btn")
+    .addEventListener("click", renderRestrictionFormContainer);
+
+  modalBody.removeEventListener("click", handleModalClick);
+  modalBody.addEventListener("click", handleModalClick);
+
+  const photoWrapper = modalBody.querySelector("#photo-content-wrapper");
+  if (photoWrapper) {
+    ["dragenter", "dragover", "dragleave", "drop"].forEach((eventName) => {
+      photoWrapper.addEventListener(
+        eventName,
+        (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        },
+        false
+      );
+    });
+    ["dragenter", "dragover"].forEach((eventName) => {
+      photoWrapper.addEventListener(
+        eventName,
+        () => photoWrapper.classList.add("highlight"),
+        false
+      );
+    });
+    ["dragleave", "drop"].forEach((eventName) => {
+      photoWrapper.addEventListener(
+        eventName,
+        () => photoWrapper.classList.remove("highlight"),
+        false
+      );
+    });
+    photoWrapper.addEventListener(
+      "drop",
+      (e) => {
+        const file = e.dataTransfer.files[0];
+        uploadPhoto(file);
+      },
+      false
+    );
+  }
+}
+
 const handlePasteOnModal = async (e) => {
   if (!modal.classList.contains("active") || !currentOpenItemId) return;
   const items = (e.clipboardData || window.clipboardData)?.items;
@@ -874,8 +1152,12 @@ function setupModal() {
   modalCloseBtn.addEventListener("click", closeModal);
 
   window.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && modal.classList.contains("active")) {
-      closeModal();
+    if (e.key === "Escape") {
+      if (fullscreenViewer && !fullscreenViewer.classList.contains("hidden")) {
+        closeFullscreenViewer();
+      } else if (modal.classList.contains("active")) {
+        closeModal();
+      }
     }
     handleFocusTrap(e);
   });
@@ -923,6 +1205,8 @@ function openRestrictionsModal(itemId, itemName) {
   modalContent.setAttribute("aria-modal", "true");
   modalContent.setAttribute("aria-labelledby", "modal-item-name");
   modal.classList.add("active");
+  document.body.classList.add("modal-open");
+  modal.classList.add("modal-large");
   window.addEventListener("paste", handlePasteOnModal);
 
   renderDetailsCard();
@@ -934,7 +1218,8 @@ function closeModal() {
     activeTomSelect.destroy();
     activeTomSelect = null;
   }
-  modal.classList.remove("active");
+  document.body.classList.remove("modal-open");
+  modal.classList.remove("active", "modal-large");
   window.removeEventListener("paste", handlePasteOnModal);
   if (lastFocusedElement) {
     lastFocusedElement.focus();
@@ -953,7 +1238,7 @@ function findItemInCurrentWeekTree(itemId) {
       for (const item of node.items.values()) {
         const currentItemId =
           item.type === "group"
-            ? `group::${item.data.groupName}`
+            ? `group::${item.data.groupId}`
             : item.relatedTasks[0].task_code;
         if (currentItemId === itemId) {
           return item;
@@ -969,218 +1254,6 @@ function findItemInCurrentWeekTree(itemId) {
     return null;
   }
   return search(weekTree);
-}
-
-function renderDetailsCard() {
-  if (!currentOpenItemId) return;
-  // --- Data Gathering ---
-  const itemData = findItemInCurrentWeekTree(currentOpenItemId);
-
-  const itemDates = (() => {
-    if (
-      !itemData ||
-      !itemData.relatedTasks ||
-      itemData.relatedTasks.length === 0
-    ) {
-      return { start: "N/A", end: "N/A" };
-    }
-    const dates = itemData.relatedTasks.map((task) => ({
-      start: new Date(
-        (task.act_start_date || task.restart_date).replace(" ", "T")
-      ),
-      end: new Date(
-        (task.reend_date || task.target_end_date).replace(" ", "T")
-      ),
-    }));
-    const minStart = new Date(Math.min(...dates.map((d) => d.start)));
-    const maxEnd = new Date(Math.max(...dates.map((d) => d.end)));
-    return {
-      start: utils.formatBrazilianDate(minStart),
-      end: utils.formatBrazilianDate(maxEnd),
-    };
-  })();
-
-  const customValue = customValuesData.get(currentOpenItemId);
-  const balance = (() => {
-    if (
-      customValue &&
-      (customValue.planned !== null || customValue.actual !== null)
-    ) {
-      const remaining = (customValue.planned || 0) - (customValue.actual || 0);
-      return utils.formatNumberBR(remaining);
-    }
-    return null;
-  })();
-
-  const linkedIds = new Set(
-    restrictionLinks
-      .filter((l) => l.itemId === currentOpenItemId)
-      .map((l) => l.restrictionId)
-  );
-  const linkedRestrictions = restrictionsList.filter((r) =>
-    linkedIds.has(r.id)
-  );
-  const pending = linkedRestrictions
-    .filter((r) => r.status === "pending")
-    .sort((a, b) => new Date(a.due) - new Date(b.due));
-  const resolved = linkedRestrictions
-    .filter((r) => r.status === "resolved")
-    .sort((a, b) => new Date(b.due) - new Date(a.due));
-
-  // --- HTML Piece Generation ---
-  const infoCardHtml = `
-    <div class="item-info-card">
-        <h3 class="text-lg font-semibold text-primary mb-3">Informações Gerais</h3>
-        <div class="info-grid">
-            <div class="info-grid-item">
-                <span class="info-item-label">Início</span>
-                <span class="info-item-value">${itemDates.start}</span>
-            </div>
-            <div class="info-grid-item">
-                <span class="info-item-label">Término</span>
-                <span class="info-item-value">${itemDates.end}</span>
-            </div>
-            ${
-              balance !== null
-                ? `
-            <div class="info-grid-item">
-                <span class="info-item-label">Saldo Topográfico</span>
-                <span class="info-item-value">${balance}</span>
-            </div>`
-                : ""
-            }
-        </div>
-    </div>`;
-
-  const renderList = (list) => {
-    if (list.length === 0)
-      return '<p class="text-tertiary italic text-center py-4">Nenhuma.</p>';
-    return list
-      .map(
-        (r) => `
-                <div class="restriction-item status-${
-                  r.status
-                }" data-restr-id="${r.id}">
-                    <div class="flex-grow">
-                        <div class="flex items-center gap-2 mb-1">
-                            ${
-                              r.category
-                                ? `<span class="restriction-category-badge">${r.category}</span>`
-                                : ""
-                            }
-                            <p class="font-medium text-primary">${r.desc}</p>
-                        </div>
-                        <p class="text-sm text-tertiary mt-1">
-                            <span class="font-semibold">Resp:</span> ${
-                              r.resp
-                            } | 
-                            <span class="font-semibold">Prazo:</span> ${utils.formatBrazilianDate(
-                              r.due
-                            )}
-                        </p>
-                    </div>
-                    <div class="restriction-actions">
-                        <button class="action-btn toggle-status-btn">${
-                          r.status === "pending" ? "Resolver" : "Reabrir"
-                        }</button>
-                        <button class="action-btn unlink-btn text-yellow-600">Desvincular</button>
-                    </div>
-                </div>`
-      )
-      .join("");
-  };
-
-  const restrictionsHtml = `
-     <div>
-        <h3 class="text-lg font-semibold text-primary mb-2">Restrições Vinculadas</h3>
-        <div class="space-y-4">
-            <div>
-                <h4 class="font-medium text-secondary mb-2">Pendentes</h4>
-                <div id="pending-list" class="space-y-2">${renderList(
-                  pending
-                )}</div>
-            </div>
-            <div>
-                <h4 class="font-medium text-secondary mb-2">Resolvidas</h4>
-                <div id="resolved-list" class="space-y-2">${renderList(
-                  resolved
-                )}</div>
-            </div>
-        </div>
-    </div>
-    `;
-
-  // --- Main Layout ---
-  modalBody.innerHTML = `
-        <div id="photo-section" class="mb-6">
-             <h3 class="text-lg font-semibold text-primary mb-3">Foto da Atividade</h3>
-             <div id="photo-content-wrapper" class="bg-tertiary rounded-lg border border-border-primary min-h-[300px] flex items-center justify-center overflow-hidden">
-                ${renderPhotoContent()}
-             </div>
-        </div>
-
-        <div class="space-y-6">
-            <div>
-                ${infoCardHtml}
-            </div>
-            <div>
-                ${restrictionsHtml}
-                <div id="add-restriction-section" class="mt-6 pt-6 border-t border-border-primary">
-                    <button id="show-add-restriction-form-btn" class="w-full bg-blue-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-blue-700">Adicionar/Vincular Restrição</button>
-                    <div id="restriction-form-container" class="hidden">
-                        <!-- Form will be rendered here -->
-                    </div>
-                </div>
-            </div>
-        </div>
-        `;
-
-  // --- Event Listeners ---
-  document
-    .getElementById("show-add-restriction-form-btn")
-    .addEventListener("click", renderRestrictionFormContainer);
-  modalBody.addEventListener("click", handleModalClick);
-  modalBody.addEventListener("submit", handleModalSubmit);
-
-  const photoWrapper = modalBody.querySelector("#photo-content-wrapper");
-  if (photoWrapper) {
-    photoWrapper.addEventListener("click", handlePhotoClick);
-    photoWrapper.addEventListener("change", handlePhotoChange);
-
-    // Drag & Drop listeners
-    ["dragenter", "dragover", "dragleave", "drop"].forEach((eventName) => {
-      photoWrapper.addEventListener(
-        eventName,
-        (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-        },
-        false
-      );
-    });
-    ["dragenter", "dragover"].forEach((eventName) => {
-      photoWrapper.addEventListener(
-        eventName,
-        () => photoWrapper.classList.add("highlight"),
-        false
-      );
-    });
-    ["dragleave", "drop"].forEach((eventName) => {
-      photoWrapper.addEventListener(
-        eventName,
-        () => photoWrapper.classList.remove("highlight"),
-        false
-      );
-    });
-    photoWrapper.addEventListener(
-      "drop",
-      (e) => {
-        const file = e.dataTransfer.files[0];
-        uploadPhoto(file);
-      },
-      false
-    );
-  }
 }
 
 function renderRestrictionFormContainer() {
@@ -1265,6 +1338,16 @@ function renderRestrictionFormContainer() {
         </div>
     `;
 
+  // Attach event listeners directly to the forms
+  const linkForm = document.getElementById("link-restriction-form");
+  if (linkForm) {
+    linkForm.addEventListener("submit", handleLinkRestrictionSubmit);
+  }
+  const addForm = document.getElementById("add-restriction-form");
+  if (addForm) {
+    addForm.addEventListener("submit", handleAddRestrictionSubmit);
+  }
+
   if (unlinkedOptions.length > 0) {
     activeTomSelect = new TomSelect("#restr-select", {
       placeholder: "Selecione uma restrição...",
@@ -1322,88 +1405,107 @@ async function updateAndRerender() {
   await renderCurrentWeekView();
 }
 
-async function handleModalSubmit(e) {
-  e.preventDefault(); // Prevent default form submission for all forms in modal
-  const form = e.target;
-
-  if (form.id === "link-restriction-form") {
-    const selectedId = activeTomSelect.getValue();
-    if (!selectedId) {
-      utils.showToast("Selecione uma restrição para vincular.", "error");
-      return;
-    }
-    restrictionLinks.push({
-      restrictionId: selectedId,
-      itemId: currentOpenItemId,
-    });
-    await storage.saveData(
-      storage.APP_KEYS.RESTRICTION_LINKS_KEY,
-      restrictionLinks
-    );
-    utils.showToast("Restrição vinculada com sucesso.", "success");
-    activeTomSelect.destroy();
-    activeTomSelect = null;
-    await updateAndRerender();
-  } else if (form.id === "add-restriction-form") {
-    const newId = uuidv4();
-    const newRestriction = {
-      id: newId,
-      desc: document.getElementById("restr-desc").value.trim(),
-      resp: document.getElementById("restr-resp").value.trim(),
-      due: document.getElementById("restr-due").value.trim(),
-      category: document.getElementById("restr-category").value || null,
-      status: "pending",
-    };
-    if (!newRestriction.desc || !newRestriction.resp || !newRestriction.due) {
-      utils.showToast("Preencha todos os campos da nova restrição.", "error");
-      return;
-    }
-    restrictionsList.push(newRestriction);
-    restrictionLinks.push({ restrictionId: newId, itemId: currentOpenItemId });
-    await Promise.all([
-      storage.saveData(
-        storage.APP_KEYS.RESTRICTIONS_LIST_KEY,
-        restrictionsList
-      ),
-      storage.saveData(
-        storage.APP_KEYS.RESTRICTION_LINKS_KEY,
-        restrictionLinks
-      ),
-    ]);
-    utils.showToast("Nova restrição adicionada e vinculada.", "success");
-    await updateAndRerender();
+async function handleLinkRestrictionSubmit(e) {
+  e.preventDefault(); // Stop page reload
+  const selectedId = activeTomSelect.getValue();
+  if (!selectedId) {
+    utils.showToast("Selecione uma restrição para vincular.", "error");
+    return;
   }
+  restrictionLinks.push({
+    restrictionId: selectedId,
+    itemId: currentOpenItemId,
+  });
+  await storage.saveData(
+    storage.APP_KEYS.RESTRICTION_LINKS_KEY,
+    restrictionLinks
+  );
+  utils.showToast("Restrição vinculada com sucesso.", "success");
+  activeTomSelect.destroy();
+  activeTomSelect = null;
+  await updateAndRerender();
+}
+
+async function handleAddRestrictionSubmit(e) {
+  e.preventDefault(); // Stop page reload
+  const newId = utils.uuidv4();
+  const newRestriction = {
+    id: newId,
+    desc: document.getElementById("restr-desc").value.trim(),
+    resp: document.getElementById("restr-resp").value.trim(),
+    due: document.getElementById("restr-due").value.trim(),
+    category: document.getElementById("restr-category").value || null,
+    status: "pending",
+  };
+  if (!newRestriction.desc || !newRestriction.resp || !newRestriction.due) {
+    utils.showToast("Preencha todos os campos da nova restrição.", "error");
+    return;
+  }
+  restrictionsList.push(newRestriction);
+  restrictionLinks.push({
+    restrictionId: newId,
+    itemId: currentOpenItemId,
+  });
+  await Promise.all([
+    storage.saveData(storage.APP_KEYS.RESTRICTIONS_LIST_KEY, restrictionsList),
+    storage.saveData(storage.APP_KEYS.RESTRICTION_LINKS_KEY, restrictionLinks),
+  ]);
+  utils.showToast("Nova restrição adicionada e vinculada.", "success");
+  await updateAndRerender();
 }
 
 async function handleModalClick(e) {
-  const restrictionItem = e.target.closest(".restriction-item");
-  if (!restrictionItem) return;
-
-  const restrictionId = restrictionItem.dataset.restrId;
-  const restriction = restrictionsList.find((r) => r.id === restrictionId);
-  if (!restriction) return;
-
-  if (e.target.classList.contains("toggle-status-btn")) {
-    restriction.status =
-      restriction.status === "pending" ? "resolved" : "pending";
-    await storage.saveData(
-      storage.APP_KEYS.RESTRICTIONS_LIST_KEY,
-      restrictionsList
-    );
-    utils.showToast("Status da restrição alterado.", "success");
-  } else if (e.target.classList.contains("unlink-btn")) {
-    restrictionLinks = restrictionLinks.filter(
-      (l) =>
-        !(l.itemId === currentOpenItemId && l.restrictionId === restrictionId)
-    );
-    await storage.saveData(
-      storage.APP_KEYS.RESTRICTION_LINKS_KEY,
-      restrictionLinks
-    );
-    utils.showToast("Restrição desvinculada.", "success");
+  // --- Photo File Input ---
+  if (e.target.id === "photo-file-input") {
+    const file = e.target.files[0];
+    uploadPhoto(file);
+    return;
   }
 
-  await updateAndRerender();
+  // --- Photo Viewer ---
+  const photoContainer = e.target.closest(".photo-viewer-clickable");
+  if (photoContainer && !e.target.closest(".remove-photo-btn")) {
+    const img = photoContainer.querySelector("img");
+    if (img && img.src) {
+      openFullscreenViewer(img.src);
+    }
+    return;
+  }
+
+  // --- Remove Photo ---
+  if (e.target.closest(".remove-photo-btn")) {
+    handleRemovePhoto();
+    return;
+  }
+
+  // --- Restriction Item Interaction ---
+  const restrictionItem = e.target.closest(".restriction-item");
+  if (restrictionItem) {
+    const restrictionId = restrictionItem.dataset.restrId;
+    const restriction = restrictionsList.find((r) => r.id === restrictionId);
+    if (!restriction) return;
+
+    if (e.target.classList.contains("toggle-status-btn")) {
+      restriction.status =
+        restriction.status === "pending" ? "resolved" : "pending";
+      await storage.saveData(
+        storage.APP_KEYS.RESTRICTIONS_LIST_KEY,
+        restrictionsList
+      );
+      utils.showToast("Status da restrição alterado.", "success");
+    } else if (e.target.classList.contains("unlink-btn")) {
+      restrictionLinks = restrictionLinks.filter(
+        (l) =>
+          !(l.itemId === currentOpenItemId && l.restrictionId === restrictionId)
+      );
+      await storage.saveData(
+        storage.APP_KEYS.RESTRICTION_LINKS_KEY,
+        restrictionLinks
+      );
+      utils.showToast("Restrição desvinculada.", "success");
+    }
+    await updateAndRerender();
+  }
 }
 
 // --- Photo Management Functions ---
@@ -1414,7 +1516,7 @@ function renderPhotoContent() {
   const media = activityMediaMap.get(currentOpenItemId);
   if (media?.imageUrl) {
     return `
-      <div class="relative group h-full w-full">
+      <div class="relative group h-full w-full photo-viewer-clickable">
         <img src="${media.imageUrl}" alt="Foto da atividade" class="w-full h-full object-cover">
         <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all flex items-center justify-center rounded-lg">
             <button class="remove-photo-btn hidden group-hover:block px-4 py-2 bg-red-600 text-white rounded-md text-sm font-semibold">Remover Foto</button>
@@ -1430,18 +1532,6 @@ function renderPhotoContent() {
       </div>
     `;
   }
-}
-
-function handlePhotoClick(e) {
-  if (e.target.classList.contains("remove-photo-btn")) {
-    handleRemovePhoto();
-  }
-}
-
-function handlePhotoChange(e) {
-  if (e.target.id !== "photo-file-input") return;
-  const file = e.target.files[0];
-  uploadPhoto(file);
 }
 
 async function uploadPhoto(file) {
@@ -1532,4 +1622,30 @@ async function handleRemovePhoto() {
     utils.showToast(`Falha ao remover: ${error.message}`, "error");
     wrapper.innerHTML = renderPhotoContent();
   }
+}
+
+// --- Fullscreen Viewer Functions ---
+function openFullscreenViewer(imageUrl) {
+  if (!fullscreenViewer || !fullscreenImage) return;
+  fullscreenImage.src = imageUrl;
+  fullscreenViewer.classList.remove("hidden");
+  document.body.classList.add("modal-open");
+}
+
+function closeFullscreenViewer() {
+  if (!fullscreenViewer) return;
+  fullscreenViewer.classList.add("hidden");
+  fullscreenImage.src = ""; // Clear src to free memory
+  document.body.classList.remove("modal-open");
+}
+
+function setupFullscreenViewer() {
+  if (!fullscreenViewer) return;
+  fullscreenViewer.addEventListener("click", (e) => {
+    // Close only if the backdrop itself is clicked, not the image
+    if (e.target === fullscreenViewer) {
+      closeFullscreenViewer();
+    }
+  });
+  fullscreenCloseBtn?.addEventListener("click", closeFullscreenViewer);
 }
