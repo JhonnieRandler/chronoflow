@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Análise de Restrições | ChronoFlow</title>
+    <link rel="icon" type="image/png" href="logo.png" />
+    <!-- SCRIPT DE BLOQUEIO DE RENDERIZAÇÃO PARA O TEMA -->
+    <script>
+      (function () {
+        try {
+          var theme = localStorage.getItem("theme");
+          if (theme === "dark") {
+            document.documentElement.classList.add("dark");
+          }
+        } catch (e) {
+          /* Ignorar erros de acesso ao localStorage */
+        }
+      })();
+    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="main-content">
+      <div
+        class="analysis-page-container max-w-screen-2xl mx-auto p-4 sm:p-6 lg:p-8"
+      >
+        <div class="card p-6 bg-secondary mb-6">
+          <h1 class="text-3xl font-bold text-primary mb-2">
+            Análise de Restrições
+          </h1>
+          <p class="text-secondary">
+            Visão geral e tendências das restrições do projeto.
+          </p>
+        </div>
+
+        <!-- KPIs Section -->
+        <div
+          id="kpi-section"
+          class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6"
+        >
+          <!-- KPI Skeleton -->
+          <div class="card p-6 bg-secondary">
+            <div class="skeleton skeleton-text" style="width: 40%"></div>
+            <div
+              class="skeleton skeleton-title mt-2"
+              style="width: 20%; height: 2rem"
+            ></div>
+          </div>
+          <div class="card p-6 bg-secondary">
+            <div class="skeleton skeleton-text" style="width: 40%"></div>
+            <div
+              class="skeleton skeleton-title mt-2"
+              style="width: 20%; height: 2rem"
+            ></div>
+          </div>
+        </div>
+
+        <!-- Charts Section -->
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
+          <div class="card p-6 bg-secondary">
+            <h2 class="text-xl font-bold text-primary mb-4">
+              Causa Raiz das Restrições Pendentes (Pareto)
+            </h2>
+            <div id="pareto-chart-container" class="relative h-96">
+              <div class="skeleton skeleton-block h-full w-full"></div>
+            </div>
+          </div>
+          <div class="card p-6 bg-secondary">
+            <h2 class="text-xl font-bold text-primary mb-4">
+              Tendência de Resolução de Restrições por Semana
+            </h2>
+            <div id="trend-chart-container" class="relative h-96">
+              <div class="skeleton skeleton-block h-full w-full"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Detailed List Section -->
+        <div class="card p-6 bg-secondary">
+          <h2 class="text-xl font-bold text-primary mb-4">
+            Lista Detalhada de Restrições Pendentes
+          </h2>
+          <div id="pending-restrictions-list">
+            <!-- Table Skeleton -->
+            <div class="table-container">
+              <table class="w-full">
+                <thead>
+                  <tr>
+                    <th><div class="skeleton skeleton-text"></div></th>
+                    <th><div class="skeleton skeleton-text"></div></th>
+                    <th><div class="skeleton skeleton-text"></div></th>
+                    <th><div class="skeleton skeleton-text"></div></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><div class="skeleton skeleton-text"></div></td>
+                    <td><div class="skeleton skeleton-text"></div></td>
+                    <td><div class="skeleton skeleton-text"></div></td>
+                    <td><div class="skeleton skeleton-text"></div></td>
+                  </tr>
+                  <tr>
+                    <td><div class="skeleton skeleton-text"></div></td>
+                    <td><div class="skeleton skeleton-text"></div></td>
+                    <td><div class="skeleton skeleton-text"></div></td>
+                    <td><div class="skeleton skeleton-text"></div></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="analise_restricoes.js" defer></script>
+  </body>
+</html>

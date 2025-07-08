@@ -269,6 +269,120 @@
       />
     </div>
 
+    <!-- Modal de Execução de Checklist -->
+    <div id="checklist-runner-modal" class="modal-overlay">
+      <div class="modal-content bg-secondary">
+        <div
+          class="flex-shrink-0 px-6 sm:px-8 pt-6 pb-4 border-b border-gray-200"
+        >
+          <div class="flex justify-between items-start">
+            <div>
+              <h2
+                id="checklist-runner-modal-title"
+                class="text-2xl font-bold text-primary"
+              >
+                Executar Checklist
+              </h2>
+              <p
+                id="checklist-runner-modal-subtitle"
+                class="text-secondary text-sm mt-1"
+              ></p>
+            </div>
+            <button
+              id="checklist-runner-modal-close-btn"
+              class="text-quaternary hover:text-primary text-3xl"
+              aria-label="Fechar modal de checklist"
+            >
+              &times;
+            </button>
+          </div>
+        </div>
+        <div
+          id="checklist-runner-modal-body"
+          class="px-6 sm:px-8 py-6 overflow-y-auto"
+        ></div>
+        <div
+          id="checklist-runner-modal-footer"
+          class="flex-shrink-0 px-6 sm:px-8 pt-4 pb-6 mt-auto bg-gray-50 border-t border-gray-200 dark:bg-gray-800 dark:border-gray-700"
+        >
+          <div class="flex justify-end gap-4">
+            <button
+              id="checklist-runner-cancel-btn"
+              class="px-4 py-2 bg-gray-200 text-primary rounded-md hover:bg-gray-300"
+            >
+              Cancelar
+            </button>
+            <button
+              id="checklist-runner-save-btn"
+              class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400"
+              disabled
+            >
+              Salvar Checklist
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal de Vinculação de Restrições -->
+    <div id="restriction-linker-modal" class="modal-overlay">
+      <div class="modal-content">
+        <div
+          class="flex-shrink-0 px-6 sm:px-8 pt-6 pb-4 border-b border-gray-200 dark:border-gray-700"
+        >
+          <div class="flex justify-between items-start">
+            <div>
+              <h2
+                id="restriction-linker-title"
+                class="text-2xl font-bold text-primary"
+              >
+                Vincular Novas Restrições
+              </h2>
+              <p
+                id="restriction-linker-subtitle"
+                class="text-secondary text-sm mt-1"
+              >
+                Selecione uma restrição à esquerda e as atividades que ela
+                impacta à direita.
+              </p>
+            </div>
+            <button
+              id="restriction-linker-close-btn"
+              class="text-quaternary hover:text-primary text-3xl"
+              aria-label="Fechar vinculador de restrições"
+            >
+              &times;
+            </button>
+          </div>
+        </div>
+        <div
+          id="restriction-linker-body"
+          class="p-6 sm:p-8 flex-grow overflow-hidden"
+        >
+          <!-- Workspace will be injected here by JS -->
+        </div>
+        <div
+          id="restriction-linker-footer"
+          class="flex-shrink-0 px-6 sm:px-8 pt-4 pb-6 mt-auto bg-gray-50 border-t border-gray-200 dark:bg-gray-800 dark:border-gray-700"
+        >
+          <div class="flex justify-end gap-4">
+            <button
+              id="restriction-linker-cancel-btn"
+              class="px-4 py-2 bg-gray-200 text-primary rounded-md hover:bg-gray-300"
+            >
+              Fechar
+            </button>
+            <button
+              id="restriction-linker-save-btn"
+              class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+            >
+              Salvar Vínculos
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- App Scripts as a module -->
     <script type="module" src="proximas_semanas.js" defer></script>
   </body>

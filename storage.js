@@ -19,6 +19,8 @@ import {
   getDocs,
   writeBatch,
   deleteDoc,
+  query,
+  where,
 } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
 
 const APP_KEYS = {
@@ -30,6 +32,11 @@ const APP_KEYS = {
   CUSTOM_VALUES_KEY: "customActivityValues",
   RESTRICTIONS_LIST_KEY: "restrictionsList",
   RESTRICTION_LINKS_KEY: "restrictionLinks",
+  ACTIVITY_DETAILS_KEY: "activityDetails",
+  MILESTONES_LIST_KEY: "milestonesList", // New key for milestones
+  MILESTONE_LINKS_KEY: "milestoneLinks", // New key for milestone links
+  CHECKLISTS_KEY: "checklists",
+  CHECKLIST_RUNS_KEY: "checklistRuns", // New key for checklist instances
 };
 
 // This list is used to validate keys during import.
@@ -44,6 +51,11 @@ const STORAGE_DEFAULTS = {
   [APP_KEYS.CUSTOM_VALUES_KEY]: [],
   [APP_KEYS.RESTRICTIONS_LIST_KEY]: [],
   [APP_KEYS.RESTRICTION_LINKS_KEY]: [],
+  [APP_KEYS.ACTIVITY_DETAILS_KEY]: [],
+  [APP_KEYS.MILESTONES_LIST_KEY]: [],
+  [APP_KEYS.MILESTONE_LINKS_KEY]: [],
+  [APP_KEYS.CHECKLISTS_KEY]: [],
+  [APP_KEYS.CHECKLIST_RUNS_KEY]: [], // Default for new key
 };
 
 // If Firebase fails to initialize, db will be undefined, and we must handle this gracefully.
@@ -58,6 +70,9 @@ const versionsCollectionRef = !initializationError
   : null;
 const mediaCollectionRef = !initializationError
   ? collection(db, "activity_media")
+  : null;
+const detailsCollectionRef = !initializationError
+  ? collection(db, "activity_details")
   : null;
 
 /**
@@ -220,6 +235,76 @@ async function deleteActivityMedia(itemId) {
 }
 
 /**
+ * Retrieves all activity detail (execution plan) documents.
+ * @returns {Promise<Array<Object>>} An array of activity detail objects.
+ */
+async function getActivityDetails() {
+  if (!detailsCollectionRef) return [];
+  const details = [];
+  try {
+    const querySnapshot = await getDocs(detailsCollectionRef);
+    querySnapshot.forEach((doc) => {
+      details.push({ docId: doc.id, ...doc.data() });
+    });
+    return details;
+  } catch (e) {
+    console.error("Error fetching activity details:", e);
+    return [];
+  }
+}
+
+/**
+ * Saves the entire execution plan for a parent item, ensuring consistency.
+ * This deletes all old steps for the parent and writes all new ones.
+ * @param {string} parentId The ID of the parent task or group.
+ * @param {Array<Object>} steps The array of new step objects to save.
+ */
+async function saveActivityDetails(parentId, steps) {
+  if (!detailsCollectionRef) throw new Error("Firebase not initialized.");
+  const batch = writeBatch(db);
+
+  // 1. Find all existing documents for this parentId to delete them
+  const q = query(detailsCollectionRef, where("parentId", "==", parentId));
+  const querySnapshot = await getDocs(q);
+  querySnapshot.forEach((document) => {
+    batch.delete(document.ref);
+  });
+
+  // 2. Add all new steps
+  steps.forEach((step) => {
+    const newDocRef = doc(detailsCollectionRef); // Create a new doc with a unique ID
+    batch.set(newDocRef, { ...step, parentId });
+  });
+
+  try {
+    await batch.commit();
+  } catch (e) {
+    console.error(`Error saving details for item '${parentId}':`, e);
+    throw e;
+  }
+}
+
+/**
+ * Deletes all execution plan steps associated with a parent item.
+ * @param {string} parentId The ID of the parent task or group.
+ */
+async function deleteActivityDetails(parentId) {
+  if (!detailsCollectionRef) throw new Error("Firebase not initialized.");
+  const batch = writeBatch(db);
+  const q = query(detailsCollectionRef, where("parentId", "==", parentId));
+  const querySnapshot = await getDocs(q);
+  querySnapshot.forEach((doc) => {
+    batch.delete(doc.ref);
+  });
+  try {
+    await batch.commit();
+  } catch (e) {
+    console.error(`Error deleting details for item '${parentId}':`, e);
+    throw e;
+  }
+}
+
+/**
  * Exports all data from all collections into a single structured JS object for backup.
  * @returns {Promise<Object>} An object containing all stored data.
  */
@@ -228,17 +313,21 @@ async function exportAllData() {
     !configCollectionRef ||
     !baseCollectionRef ||
     !versionsCollectionRef ||
-    !mediaCollectionRef
+    !mediaCollectionRef ||
+    !detailsCollectionRef
   )
     return {};
+
   const backupData = {
     config: {},
     base: {},
     versions: {},
     media: {},
+    details: [], // Export as an array
   };
+
   try {
-    // Export config data
+    // Export config data (including checklists and checklist runs)
     const configSnapshot = await getDocs(configCollectionRef);
     configSnapshot.forEach((doc) => {
       backupData.config[doc.id] = doc.data().data;
@@ -262,16 +351,22 @@ async function exportAllData() {
       backupData.media[doc.id] = doc.data();
     });
 
+    // Export details data
+    const detailsSnapshot = await getDocs(detailsCollectionRef);
+    detailsSnapshot.forEach((doc) => {
+      backupData.details.push(doc.data());
+    });
+
     return backupData;
   } catch (e) {
     console.error("Error exporting all data from Firestore:", e);
-    return { config: {}, base: {}, versions: {}, media: {} };
+    return { config: {}, base: {}, versions: {}, media: {}, details: [] };
   }
 }
 
 /**
  * Imports data from a structured JS object, overwriting existing data.
- * @param {Object} data The object containing `config`, `base`, `versions`, and `media` data.
+ * @param {Object} data The object containing `config`, `base`, `versions`, `media`, and `details` data.
  * @returns {Promise<number>} The number of documents successfully written.
  */
 async function importAllData(data) {
@@ -280,12 +375,14 @@ async function importAllData(data) {
     !baseCollectionRef ||
     !versionsCollectionRef ||
     !mediaCollectionRef ||
+    !detailsCollectionRef ||
     !data ||
     typeof data !== "object" ||
     !data.config ||
     !data.base ||
     !data.versions ||
-    !data.media
+    !data.media ||
+    !data.details // Check for details array
   ) {
     throw new Error("Invalid backup file structure.");
   }
@@ -325,6 +422,14 @@ async function importAllData(data) {
     }
   }
 
+  // Import details data
+  if (Array.isArray(data.details)) {
+    data.details.forEach((detailDoc) => {
+      const docRef = doc(detailsCollectionRef); // Create new docs with unique IDs
+      batch.set(docRef, detailDoc);
+    });
+  }
+
   try {
     await batch.commit();
     // Batch writes don't return a count, so we calculate it.
@@ -332,7 +437,8 @@ async function importAllData(data) {
       Object.keys(data.config).length +
       (Object.keys(data.base).length > 0 ? 1 : 0) +
       Object.keys(data.versions).length +
-      Object.keys(data.media).length;
+      Object.keys(data.media).length +
+      (data.details?.length || 0);
     return count;
   } catch (e) {
     console.error("Error importing all data to Firestore:", e);
@@ -352,6 +458,9 @@ export const storage = {
   getActivityMedia,
   saveActivityMedia,
   deleteActivityMedia,
+  getActivityDetails,
+  saveActivityDetails,
+  deleteActivityDetails,
   exportAllData,
   importAllData,
 };

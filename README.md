@@ -12,12 +12,13 @@ O sistema é uma aplicação web moderna que roda inteiramente no navegador, uti
 
 ### Estrutura de Dados Otimizada no Firestore
 
-Para evitar redundância e garantir performance, os dados são organizados em quatro coleções principais:
+Para evitar redundância e garantir performance, os dados são organizados em cinco coleções principais:
 
 1.  **`p6-app-data` (Configurações Globais):** Armazena todas as configurações da aplicação que são independentes do projeto, como mapeamento de semanas, recurso principal, agrupamentos e a lista centralizada de restrições.
 2.  **`project_base` (Dados Estáticos do Projeto):** Contém os dados fundamentais do projeto que raramente mudam. Esta coleção terá **apenas um documento**, representando o esqueleto do cronograma (`TASK`, `RSRC`, `WBS_HIERARCHY`, etc.).
 3.  **`project_versions` (Avanço Semanal):** Cada documento nesta coleção é um "snapshot" do projeto, correspondente a um arquivo `.xer` carregado. Contém apenas os dados que mudam a cada semana (`TASKRSRC`, `TASKPRED`).
 4.  **`activity_media` (Metadados de Mídia):** Armazena os metadados das fotos enviadas, como a URL de download e o caminho no Firebase Storage, vinculando cada foto a uma atividade ou grupo específico.
+5.  **`activity_details` (Plano de Execução):** Contém as etapas construtivas detalhadas de uma atividade ou grupo, permitindo um planejamento de curto prazo (Pull Planning).
 
 > **Vantagem Principal:** Em vez de salvar o cronograma inteiro (megabytes) toda semana, salvamos apenas alguns kilobytes de dados de avanço. Isso torna o sistema mais rápido, mais barato e imensamente mais escalável.
 
@@ -27,9 +28,9 @@ Para evitar redundância e garantir performance, os dados são organizados em qu
     - **Primeiro Upload:** O sistema salva as tabelas estáticas (`TASK`, `RSRC`) na coleção `project_base`.
     - **Uploads Subsequentes:** O sistema salva apenas as tabelas de avanço (`TASKRSRC`, `TASKPRED`) como uma nova versão em `project_versions`.
 2.  **⚙️ Configuração (`configuracao.html`):** O usuário parametriza como os dados serão analisados.
-3.  **🖼️ Gestão de Atividades (`proximas_semanas.html`):** O usuário pode **adicionar uma foto** a uma atividade ou grupo. A imagem é enviada para o **Firebase Storage**, e sua URL é salva no **Firestore** (`activity_media`).
-4.  **📈 Análise e Visualização:** As páginas de análise carregam os dados base e as versões relevantes, combinando-os em tempo real com as configurações, restrições e fotos para apresentar uma visão completa.
-5.  **📦 Backup (`configuracao.html`):** O usuário exporta todos os dados (configurações, base, versões e metadados de mídia) para um arquivo `.json`.
+3.  **📋 Gestão de Atividades (`proximas_semanas.html`):** O usuário pode **adicionar um plano de execução detalhado** a uma atividade ou grupo. Essas etapas são salvas na coleção `activity_details`. Adicionalmente, ele pode adicionar uma foto à atividade, que é enviada para o **Firebase Storage**, e sua URL é salva no **Firestore** (`activity_media`).
+4.  **📈 Análise e Visualização:** As páginas de análise carregam os dados base e as versões relevantes, combinando-os em tempo real com as configurações, restrições, fotos e planos de execução para apresentar uma visão completa.
+5.  **📦 Backup (`configuracao.html`):** O usuário exporta todos os dados (configurações, base, versões, metadados de mídia e planos de execução) para um arquivo `.json`.
 
 ## 📄 3. Detalhamento das Páginas e Funcionalidades
 
@@ -49,13 +50,18 @@ Centraliza todas as parametrizações da aplicação.
   - **Interface Simplificada:** Uma vez que uma atividade faz parte de um grupo, ela **desaparece de todas as caixas de seleção da aplicação**. O gerenciamento é feito diretamente no grupo, tornando a interface mais limpa e focada.
   - **IDs Estáveis:** Cada grupo recebe um **ID único e imutável (UUID)**. Isso garante que, ao **renomear um grupo**, todos os seus vínculos com restrições, fotos e valores personalizados permaneçam intactos.
   - **Migração Automática:** Um script de migração único e automático atualiza os dados antigos (que usavam o nome como ID) para o novo formato de ID estável, garantindo a integridade dos dados existentes.
+- **Gerenciar Detalhamento:** Um ponto centralizado para gerenciar os Planos de Execução (Pull Planning). Permite **criar novos planos** para atividades/grupos, **editar planos existentes** adicionando ou removendo etapas, e **excluir planos** que não são mais necessários, tudo a partir de uma única interface.
+- **Gerenciar Marcos (Milestones):** Cria uma área de trabalho dedicada para a criação de marcos do projeto, cada um com um nome e uma data-limite. Permite vincular esses marcos a atividades específicas ou a ramos inteiros da WBS através de uma interface de árvore hierárquica, facilitando o controle de prazos-chave.
 - **Valores Personalizados:** Permite ao usuário inserir valores "Previsto" e "Realizado" (ex: de topografia) que se sobrepõem aos do cronograma.
-- **Importar & Exportar:** Utiliza o módulo `storage.js` para criar um backup (`.json`) com a estrutura completa de todas as coleções, **incluindo os metadados das fotos**, garantindo a segurança e portabilidade.
+- **Importar & Exportar:** Utiliza o módulo `storage.js` para criar um backup (`.json`) com a estrutura completa de todas as coleções, **incluindo os metadados das fotos e planos de execução**, garantindo a segurança e portabilidade.
 
 ### `proximas_semanas.html` (6-Week Look Ahead)
 
 Ferramenta interativa de planejamento proativo, ideal para reuniões de 6WLA.
 
+- **Plano de Execução (Pull Planning):** Permite detalhar uma atividade macro em etapas construtivas menores.
+  - **Visualização Inteligente:** Se uma atividade possui um plano, o 6WLA exibe **quais etapas específicas estão programadas para ocorrer naquela semana**, em vez da informação genérica de "Andamento".
+  - **Gerenciamento no Modal:** Um novo painel no modal permite adicionar, editar e remover etapas, cada uma com sua própria descrição e datas.
 - **Gerenciamento de Atividades no Modal:** Clicar em qualquer atividade abre um modal redesenhado e mais amplo.
   - **Foto em Destaque:** O modal exibe uma **foto da atividade** em destaque no topo, permitindo análise visual imediata.
   - **Upload de Múltiplas Formas:** O usuário pode adicionar ou atualizar a foto de três maneiras ágeis:
@@ -66,10 +72,21 @@ Ferramenta interativa de planejamento proativo, ideal para reuniões de 6WLA.
 - **Indicadores Visuais:**
   - **🚩 Restrições Pendentes:** Atividades com impedimentos são marcadas com uma bandeira.
   - **📸 Foto Anexada:** Atividades com fotos são marcadas com um ícone de câmera.
+  - **📋 Plano Detalhado:** Atividades com um Plano de Execução são marcadas com um ícone de prancheta.
+  - **🏁 Alerta de Marco em Risco:** Exibe um ícone de bandeira de corrida pulsante em atividades cuja data de término prevista (`reend_date`) ultrapassa a data-limite de um marco vinculado, alertando a equipe sobre possíveis atrasos em entregas importantes.
 
 ### `analise_atividade.html` (Análise Detalhada)
 
 Oferece uma visão profunda e comparativa de uma atividade ou grupo, incluindo um card especial para valores topográficos e um gráfico de evolução de recursos.
+
+### `analise_restricoes.html` (Análise de Restrições) - **NOVO**
+
+Uma página de BI dedicada a transformar dados de restrições em inteligência acionável.
+
+- **KPIs (Indicadores-Chave):** Exibe o total de restrições pendentes e resolvidas, oferecendo um panorama instantâneo da saúde do projeto.
+- **Gráfico de Pareto (Análise 80/20):** Mostra quais categorias de causa raiz (os 6M) são responsáveis pela maioria das restrições pendentes. Isso ajuda a gestão a focar nos problemas que causam maior impacto.
+- **Análise de Tendência:** Apresenta um gráfico da evolução das restrições (pendentes vs. resolvidas) ao longo das semanas, permitindo avaliar a eficácia da equipe na resolução de problemas.
+- **Lista Detalhada:** Fornece uma tabela de todas as restrições pendentes, ordenadas por prazo, para facilitar a priorização e ação.
 
 ## ✨ 4. Comunicação e Apresentação
 
@@ -93,6 +110,7 @@ Um novo item "Modo Apresentação" foi adicionado ao menu de navegação. Ao ati
 
 ## 🚀 7. Experiência do Usuário (UX) Aprimorada
 
+- **Design Refinado e Consistente:** Com base no feedback contínuo, a interface foi aprimorada para ser mais limpa e intuitiva. Modais foram padronizados para uma apresentação consistente em todas as telas, e elementos como botões de filtro foram redesenhados para uma aparência mais moderna e funcional, incluindo estados visuais claros para itens selecionados.
 - **Sem "Flash" de Conteúdo (FOUC):** Foi implementado um script de bloqueio de renderização no `<head>` de todas as páginas. Ele aplica o tema (claro ou escuro) salvo no `localStorage` instantaneamente, antes da página ser desenhada, eliminando o piscar da interface.
 - **Feedback Visual Imediato:** Ações assíncronas, como salvar ou importar dados, desabilitam os botões e exibem um estado de "Salvando...".
 - **Notificações "Toast":** Mensagens de sucesso ou erro aparecem como notificações discretas que desaparecem sozinhas.
@@ -182,14 +200,41 @@ Esta seção detalha as implementações-chave que sustentam as funcionalidades 
   3.  **Salvamento no Firestore:** Esta URL e o caminho do arquivo são salvos na coleção `activity_media` usando `storage.saveActivityMedia`, vinculando a foto ao `itemId`.
   4.  **Exclusão:** `handleRemovePhoto` exclui o arquivo do Firebase Storage e o documento de metadados do Firestore.
 
-### 11.5. Geração da Visão Hierárquica no Dashboard Semanal
+### 11.5. Plano de Execução (Pull Planning)
 
-- **Função Principal:** `buildGroupedTreeRecursive()` em `proximas_semanas.js`.
-- **Objetivo:** Montar a estrutura de árvore aninhada das atividades com base nos níveis de WBS que o usuário selecionou na configuração.
+- **Objetivo:** Permitir o detalhamento de uma atividade macro do cronograma em um plano de trabalho de curto prazo, conectando o planejamento de alto nível com a execução no campo.
+- **Implementação:**
+  1.  **Nova Coleção (`activity_details`):** Uma coleção no Firestore armazena as etapas construtivas, cada uma com seu nome, datas e um `parentId` que a vincula à atividade ou grupo principal.
+  2.  **Gerenciamento Centralizado (`configuracao.js`):** Um novo painel de configuração permite criar, editar e excluir os Planos de Execução de forma centralizada.
+  3.  **Visualização Inteligente no 6WLA:** A lógica de renderização foi aprimorada para verificar se um item possui um plano de execução. Se sim, ele exibe as etapas específicas agendadas para a semana atual, em vez de uma informação genérica, oferecendo uma visão clara e acionável.
+
+### 11.6. Geração da Visão Hierárquica no Dashboard Semanal
+
+- **Função Principal:** Lógica de agrupamento dentro de `processAndCacheWeekData()` em `proximas_semanas.js`.
+- **Objetivo:** Montar a estrutura de árvore aninhada das atividades com base nos níveis de WBS que o usuário selecionou, tratando de forma inteligente as hierarquias que não se alinham perfeitamente com a seleção.
+- **Lógica Robusta:**
+  - O algoritmo itera sobre os níveis de agrupamento selecionados pelo usuário (ex: Nível 2, depois Nível 5).
+  - Se uma atividade não possui um WBS para um nível específico (ex: não tem Nível 5), o algoritmo para de seguir a seleção do usuário e, em vez disso, encontra o **WBS pai mais profundo que a atividade realmente possui** (ex: Nível 3).
+  - Isso garante que cada atividade seja sempre colocada sob seu pai correto, eliminando tanto a duplicação de nós WBS (`Pai > Pai > Filho`) quanto atividades que ficavam sem um pai visível.
 - **Otimização:** Os dados de cada semana são processados e cacheados sob demanda ("lazy loading"), apenas na primeira vez que o usuário navega para ela.
+
+### 11.7. Gerenciamento de Marcos (Milestones)
+
+- **Objetivo:** Implementar um sistema para monitorar datas-chave e alertar sobre possíveis desvios, de forma integrada ao cronograma.
+- **Implementação:**
+  1.  **Estrutura de Dados:** Foram adicionadas duas novas configurações no Firestore, gerenciadas pelo `storage.js`: `milestonesList` e `milestoneLinks`.
+      - `milestonesList`: Armazena a definição de cada marco (ID único, nome, data-limite).
+      - `milestoneLinks`: Armazena a relação muitos-para-muitos entre os IDs dos marcos e os IDs dos itens do projeto (atividades ou grupos).
+  2.  **Área de Trabalho (`configuracao.js`):** Uma interface unificada permite a criação/edição de múltiplos marcos e seus vínculos em uma única tela. Os vínculos são gerenciados através de uma árvore WBS interativa com checkboxes, que persistem as alterações no `milestoneLinks`.
+  3.  **Lógica de Conflito (`proximas_semanas.js`):** Ao renderizar o painel de 6 semanas, para cada atividade, o sistema:
+      - Verifica se a própria atividade ou algum de seus pais na hierarquia WBS possui um marco vinculado.
+      - Se um marco é encontrado, compara a data de término prevista da atividade (`reend_date`) com a data do marco.
+      - Se a data da atividade for posterior à do marco, um alerta visual de conflito é exibido.
 
 ## 🚀 12. Melhorias Futuras
 
 - **🤖 Análise Inteligente com IA:** Integrar a API do Google Gemini para oferecer análises proativas, como sugerir planos de ação para mitigar restrições.
-- **🔗 Integração com APIs:** Conectar-se diretamente a APIs de sistemas de planejamento para automatizar o upload de dados.
+- **🔗 Integração com APIs:** Conectar-se diretamente a sistemas de planejamento para automatizar o upload de dados.
 - **🔧 Dashboards Personalizáveis:** Permitir que os usuários criem seus próprios dashboards.
+- **📈 Análise de PPC (Percentual do Plano Concluído):** Implementar métricas LEAN para medir a confiabilidade do planejamento semanal.
+- **⚡ Visualização do Caminho Crítico:** Destacar atividades críticas e quase-críticas para focar a atenção da equipe.
