@@ -1,5 +1,6 @@
 import { initializationError, showFirebaseError } from "./firebase-config.js";
 import * as utils from "./utils.js";
+import { renderHTMLTable, renderMessageBox } from "./ui-components.js";
 
 // First, check if Firebase is configured. If not, show an error and stop.
 if (initializationError) {
@@ -9,7 +10,7 @@ if (initializationError) {
 }
 
 // If no error, import other modules and run the app
-import { storage } from "./storage.js";
+import { dataLoader } from "./data-loader.js";
 
 // ===== Page Script Starts Here =====
 (async () => {
@@ -31,15 +32,15 @@ import { storage } from "./storage.js";
    * Main function to load and display all data on the page.
    */
   try {
-    const [restrictionsList, weeksData] = await Promise.all([
-      storage.getData(storage.APP_KEYS.RESTRICTIONS_LIST_KEY),
-      storage.getData(storage.APP_KEYS.WEEKS_DATA_KEY),
-    ]);
+    const { restrictionsList, weeksData } = await dataLoader.loadCoreData();
 
     if (!restrictionsList || restrictionsList.length === 0) {
       document.querySelector(".main-content").innerHTML = `
         <div class="max-w-screen-2xl mx-auto p-4 sm:p-6 lg:p-8">
-            <div class="message-box info">Nenhuma restrição encontrada. Adicione restrições na página de Configurações para começar a análise.</div>
+            ${renderMessageBox(
+              "Nenhuma restrição encontrada. Adicione restrições na página de Configurações para começar a análise.",
+              "info"
+            )}
         </div>
       `;
       return;
@@ -54,7 +55,10 @@ import { storage } from "./storage.js";
     console.error("Erro ao carregar a página de análise de restrições:", error);
     document.querySelector(".main-content").innerHTML = `
       <div class="max-w-screen-2xl mx-auto p-4 sm:p-6 lg:p-8">
-        <div class="message-box error">Ocorreu um erro ao carregar os dados: ${error.message}</div>
+        ${renderMessageBox(
+          `Ocorreu um erro ao carregar os dados: ${error.message}`,
+          "error"
+        )}
       </div>
     `;
   }
@@ -305,29 +309,18 @@ import { storage } from "./storage.js";
       return;
     }
 
-    let tableHtml = `<div class="table-container"><table><thead><tr>
-          <th>Descrição</th>
-          <th>Categoria</th>
-          <th>Responsável</th>
-          <th>Prazo</th>
-      </tr></thead><tbody>`;
+    const headers = ["Descrição", "Categoria", "Responsável", "Prazo"];
+    const rows = pending.map((r) => ({
+      Descrição: `<span class="font-medium text-primary">${r.desc}</span>`,
+      Categoria: `<span class="restriction-category-badge">${
+        r.category || "N/A"
+      }</span>`,
+      Responsável: `<span class="text-secondary">${r.resp}</span>`,
+      Prazo: `<span class="text-red-600 font-semibold">${utils.formatBrazilianDate(
+        r.due
+      )}</span>`,
+    }));
 
-    pending.forEach((r) => {
-      tableHtml += `
-              <tr>
-                  <td class="font-medium text-primary">${r.desc}</td>
-                  <td><span class="restriction-category-badge">${
-                    r.category || "N/A"
-                  }</span></td>
-                  <td class="text-secondary">${r.resp}</td>
-                  <td class="text-red-600 font-semibold">${utils.formatBrazilianDate(
-                    r.due
-                  )}</td>
-              </tr>
-          `;
-    });
-
-    tableHtml += `</tbody></table></div>`;
-    pendingRestrictionsList.innerHTML = tableHtml;
+    pendingRestrictionsList.innerHTML = renderHTMLTable(headers, rows);
   }
 })();

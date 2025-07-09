@@ -891,9 +891,16 @@ html.dark .main-resource-row {
   overflow: hidden;
 }
 
-.modal-overlay.modal-large .modal-content {
-  max-width: 1440px; /* Use a larger max-width */
-  height: 95vh;
+.modal-overlay.modal-large .modal-content,
+.modal-overlay.milestone-editor-modal .modal-content,
+.modal-overlay.restriction-linker-modal .modal-content {
+  max-width: 95vw;
+  width: 95vw;
+  height: 90vh;
+}
+
+.modal-overlay.restriction-view-modal .modal-content {
+  max-width: 1100px;
 }
 
 .modal-overlay.active .modal-content {
@@ -1327,10 +1334,6 @@ html.dark #restriction-filter-controls .sub-filter-btn:hover {
   font-weight: 600;
 }
 
-#restriction-modal .modal-content {
-  max-width: 1100px;
-}
-
 .info-grid-item {
   background-color: var(--color-bg-tertiary);
   padding: 1rem;
@@ -1505,14 +1508,8 @@ html.dark .item-entry.milestone-conflict {
   }
 }
 
-/* --- NEW: Milestone Editor Workspace --- */
-.modal-overlay.milestone-editor-modal .modal-content {
-  max-width: 95vw;
-  width: 95vw;
-  height: 90vh;
-}
-
-#milestone-workspace {
+/* --- Milestone Editor Workspace --- */
+.milestone-workspace {
   display: grid;
   grid-template-columns: 3fr 2fr; /* Left panel is wider */
   gap: 1.5rem;
@@ -1654,13 +1651,7 @@ body.modal-open {
 }
 
 /* --- NEW: Restriction Linker Workspace --- */
-#restriction-linker-modal .modal-content {
-  max-width: 95vw;
-  width: 95vw;
-  height: 90vh;
-}
-
-#restriction-workspace {
+.restriction-workspace {
   display: grid;
   grid-template-columns: 2fr 3fr; /* Right panel is wider */
   gap: 1.5rem;

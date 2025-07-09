@@ -47,29 +47,14 @@
             <div class="flex flex-col items-center gap-2 w-full lg:w-auto">
               <div
                 id="filter-controls"
-                class="grid grid-cols-3 gap-2 w-full lg:flex lg:w-auto"
+                class="grid grid-cols-3 gap-2 w-full lg:flex lg:w-auto lg:flex-wrap"
               >
-                <!-- Static Skeleton for Filters -->
-                <div
-                  class="skeleton"
-                  style="height: 38px; width: 80px; border-radius: 9999px"
-                ></div>
-                <div
-                  class="skeleton"
-                  style="height: 38px; width: 80px; border-radius: 9999px"
-                ></div>
-                <div
-                  class="skeleton"
-                  style="height: 38px; width: 80px; border-radius: 9999px"
-                ></div>
-                <div
-                  class="skeleton"
-                  style="height: 38px; width: 100px; border-radius: 9999px"
-                ></div>
-                <div
-                  class="skeleton col-span-2"
-                  style="height: 38px; width: 180px; border-radius: 9999px"
-                ></div>
+                <!-- Responsive Skeleton for Filters -->
+                <div class="skeleton h-10 w-24 rounded-full"></div>
+                <div class="skeleton h-10 w-24 rounded-full"></div>
+                <div class="skeleton h-10 w-28 rounded-full"></div>
+                <div class="skeleton h-10 w-32 rounded-full"></div>
+                <div class="skeleton h-10 w-48 rounded-full col-span-2"></div>
               </div>
               <div
                 id="restriction-filter-controls"
@@ -97,7 +82,7 @@
             </svg>
           </button>
           <div id="dashboard-output">
-            <!-- Static Skeleton for Week Card -->
+            <!-- Responsive Skeleton for Week Card -->
             <div
               class="card p-4 md:p-8 bg-secondary"
               aria-live="polite"
@@ -107,88 +92,41 @@
               <div
                 class="week-card-header flex flex-col items-center md:items-start text-center md:text-left md:flex-row md:items-center justify-between border-b-2 border-border-accent pb-3 mb-3 md:border-b md:border-border-primary"
               >
-                <div>
+                <div class="w-full md:w-3/4">
+                  <div class="skeleton h-7 w-3/4 md:w-1/2 rounded-md"></div>
                   <div
-                    class="skeleton skeleton-title"
-                    style="width: 250px; height: 1.75rem"
-                  ></div>
-                  <div
-                    class="skeleton skeleton-text mt-2"
-                    style="width: 200px"
+                    class="skeleton h-5 w-1/2 md:w-1/3 rounded-md mt-2"
                   ></div>
                 </div>
-                <div
-                  class="skeleton"
-                  style="width: 120px; height: 38px; border-radius: 0.5rem"
-                ></div>
+                <div class="skeleton h-9 w-32 rounded-md mt-4 md:mt-0"></div>
               </div>
-              <div class="mt-4 space-y-4">
+              <div class="mt-4 space-y-6">
                 <div class="wbs-group">
                   <div class="wbs-title">
-                    <div
-                      class="skeleton skeleton-text"
-                      style="width: 60%; height: 1.125rem"
-                    ></div>
-                    <div
-                      class="skeleton"
-                      style="width: 20px; height: 20px"
-                    ></div>
+                    <div class="skeleton h-6 w-3/5 rounded-md"></div>
                   </div>
-                  <div class="wbs-content" style="max-height: 500px">
-                    <div class="item-list">
+                  <div class="wbs-content !max-h-full">
+                    <div class="item-list space-y-3">
                       <div class="item-entry">
                         <div class="flex justify-between items-center">
-                          <div
-                            class="skeleton skeleton-text"
-                            style="width: 70%; height: 1rem"
-                          ></div>
-                          <div
-                            class="skeleton"
-                            style="
-                              width: 50px;
-                              height: 1rem;
-                              border-radius: 9999px;
-                            "
-                          ></div>
+                          <div class="skeleton h-5 w-4/5 rounded-md"></div>
+                          <div class="skeleton h-5 w-12 rounded-full"></div>
                         </div>
-                        <div
-                          class="skeleton skeleton-text mt-2"
-                          style="width: 30%; height: 0.875rem"
-                        ></div>
+                        <div class="skeleton h-4 w-1/3 rounded-md mt-2"></div>
                       </div>
                       <div class="item-entry">
                         <div class="flex justify-between items-center">
-                          <div
-                            class="skeleton skeleton-text"
-                            style="width: 70%; height: 1rem"
-                          ></div>
-                          <div
-                            class="skeleton"
-                            style="
-                              width: 50px;
-                              height: 1rem;
-                              border-radius: 9999px;
-                            "
-                          ></div>
+                          <div class="skeleton h-5 w-3/4 rounded-md"></div>
+                          <div class="skeleton h-5 w-12 rounded-full"></div>
                         </div>
-                        <div
-                          class="skeleton skeleton-text mt-2"
-                          style="width: 30%; height: 0.875rem"
-                        ></div>
+                        <div class="skeleton h-4 w-2/5 rounded-md mt-2"></div>
                       </div>
                     </div>
                   </div>
                 </div>
                 <div class="wbs-group">
                   <div class="wbs-title">
-                    <div
-                      class="skeleton skeleton-text"
-                      style="width: 45%; height: 1.125rem"
-                    ></div>
-                    <div
-                      class="skeleton"
-                      style="width: 20px; height: 20px"
-                    ></div>
+                    <div class="skeleton h-6 w-1/2 rounded-md"></div>
                   </div>
                 </div>
               </div>
@@ -223,28 +161,52 @@
       </div>
     </div>
 
-    <!-- Modal de Restrições -->
-    <div id="restriction-modal" class="modal-overlay">
+    <!-- Modal Genérico para a Página -->
+    <div id="page-modal" class="modal-overlay">
       <div class="modal-content bg-secondary">
         <div
-          class="flex-shrink-0 px-6 sm:px-8 pt-6 pb-4 border-b border-gray-200"
+          class="flex-shrink-0 px-6 sm:px-8 pt-6 pb-4 border-b border-border-primary"
         >
           <div class="flex justify-between items-start">
             <div>
-              <h2 class="text-2xl font-bold text-primary">
-                Gerenciar Restrições
-              </h2>
-              <p id="modal-item-name" class="text-secondary text-sm mt-1"></p>
+              <h2 id="modal-title" class="text-2xl font-bold text-primary"></h2>
+              <p id="modal-subtitle" class="text-secondary text-sm mt-1"></p>
             </div>
             <button
               id="modal-close-btn"
-              class="text-quaternary hover:text-primary text-3xl"
+              class="modal-close-btn text-quaternary hover:text-primary text-3xl"
+              aria-label="Fechar modal"
             >
               &times;
             </button>
           </div>
+          <div id="modal-header-actions" class="mt-2"></div>
         </div>
-        <div id="modal-body" class="px-6 sm:px-8 py-6"></div>
+        <div
+          id="modal-body"
+          class="px-6 sm:px-8 py-6 flex-grow overflow-y-auto"
+        ></div>
+        <div
+          id="modal-footer"
+          class="flex-shrink-0 px-6 sm:px-8 pt-4 pb-6 mt-auto bg-gray-50 border-t border-border-primary"
+        >
+          <div id="modal-message-area" class="mb-4"></div>
+          <div class="flex justify-end gap-4">
+            <button
+              id="modal-cancel-btn"
+              class="modal-cancel-btn px-4 py-2 bg-gray-200 text-primary rounded-md hover:bg-gray-300"
+            >
+              Cancelar
+            </button>
+            <button
+              id="modal-save-btn"
+              class="modal-save-btn px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+              disabled
+            >
+              Salvar
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -267,120 +229,6 @@
         src=""
         alt="Visualização de imagem em tela cheia"
       />
-    </div>
-
-    <!-- Modal de Execução de Checklist -->
-    <div id="checklist-runner-modal" class="modal-overlay">
-      <div class="modal-content bg-secondary">
-        <div
-          class="flex-shrink-0 px-6 sm:px-8 pt-6 pb-4 border-b border-gray-200"
-        >
-          <div class="flex justify-between items-start">
-            <div>
-              <h2
-                id="checklist-runner-modal-title"
-                class="text-2xl font-bold text-primary"
-              >
-                Executar Checklist
-              </h2>
-              <p
-                id="checklist-runner-modal-subtitle"
-                class="text-secondary text-sm mt-1"
-              ></p>
-            </div>
-            <button
-              id="checklist-runner-modal-close-btn"
-              class="text-quaternary hover:text-primary text-3xl"
-              aria-label="Fechar modal de checklist"
-            >
-              &times;
-            </button>
-          </div>
-        </div>
-        <div
-          id="checklist-runner-modal-body"
-          class="px-6 sm:px-8 py-6 overflow-y-auto"
-        ></div>
-        <div
-          id="checklist-runner-modal-footer"
-          class="flex-shrink-0 px-6 sm:px-8 pt-4 pb-6 mt-auto bg-gray-50 border-t border-gray-200 dark:bg-gray-800 dark:border-gray-700"
-        >
-          <div class="flex justify-end gap-4">
-            <button
-              id="checklist-runner-cancel-btn"
-              class="px-4 py-2 bg-gray-200 text-primary rounded-md hover:bg-gray-300"
-            >
-              Cancelar
-            </button>
-            <button
-              id="checklist-runner-save-btn"
-              class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400"
-              disabled
-            >
-              Salvar Checklist
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Modal de Vinculação de Restrições -->
-    <div id="restriction-linker-modal" class="modal-overlay">
-      <div class="modal-content">
-        <div
-          class="flex-shrink-0 px-6 sm:px-8 pt-6 pb-4 border-b border-gray-200 dark:border-gray-700"
-        >
-          <div class="flex justify-between items-start">
-            <div>
-              <h2
-                id="restriction-linker-title"
-                class="text-2xl font-bold text-primary"
-              >
-                Vincular Novas Restrições
-              </h2>
-              <p
-                id="restriction-linker-subtitle"
-                class="text-secondary text-sm mt-1"
-              >
-                Selecione uma restrição à esquerda e as atividades que ela
-                impacta à direita.
-              </p>
-            </div>
-            <button
-              id="restriction-linker-close-btn"
-              class="text-quaternary hover:text-primary text-3xl"
-              aria-label="Fechar vinculador de restrições"
-            >
-              &times;
-            </button>
-          </div>
-        </div>
-        <div
-          id="restriction-linker-body"
-          class="p-6 sm:p-8 flex-grow overflow-hidden"
-        >
-          <!-- Workspace will be injected here by JS -->
-        </div>
-        <div
-          id="restriction-linker-footer"
-          class="flex-shrink-0 px-6 sm:px-8 pt-4 pb-6 mt-auto bg-gray-50 border-t border-gray-200 dark:bg-gray-800 dark:border-gray-700"
-        >
-          <div class="flex justify-end gap-4">
-            <button
-              id="restriction-linker-cancel-btn"
-              class="px-4 py-2 bg-gray-200 text-primary rounded-md hover:bg-gray-300"
-            >
-              Fechar
-            </button>
-            <button
-              id="restriction-linker-save-btn"
-              class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-            >
-              Salvar Vínculos
-            </button>
-          </div>
-        </div>
-      </div>
     </div>
 
     <!-- App Scripts as a module -->

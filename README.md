@@ -231,9 +231,53 @@ Esta seção detalha as implementações-chave que sustentam as funcionalidades 
       - Se um marco é encontrado, compara a data de término prevista da atividade (`reend_date`) com a data do marco.
       - Se a data da atividade for posterior à do marco, um alerta visual de conflito é exibido.
 
-## 🚀 12. Melhorias Futuras
+### 11.8. Orquestrador de Carregamento de Dados (`data-loader.js`)
 
-- **🤖 Análise Inteligente com IA:** Integrar a API do Google Gemini para oferecer análises proativas, como sugerir planos de ação para mitigar restrições.
+- **Objetivo:** Centralizar e orquestrar toda a lógica de carregamento e pré-processamento de dados da aplicação.
+- **Implementação:**
+  - Este módulo atua como uma camada intermediária entre a UI e o `storage.js`.
+  - Ele exporta funções especializadas (ex: `loadCoreData`, `loadDashboardData`) que buscam os dados brutos necessários do Firestore.
+  - Crucialmente, ele pré-processa esses dados, convertendo listas em `Map`s para acesso rápido (ex: `wbsMap`, `customValuesMap`) e calculando dados derivados.
+  - As páginas da UI (ex: `proximas_semanas.js`, `analise_atividade.js`) agora fazem uma única chamada para uma função no `data-loader.js` e recebem todos os dados já prontos para uso.
+- **Benefício:** Elimina a duplicação massiva de código de `Promise.all` e lógica de processamento que existia em cada página. Torna o código das páginas muito mais limpo, legível e focado apenas na lógica de apresentação. Melhora a manutenibilidade, pois a lógica de dados está em um único lugar.
+
+### 11.9. Módulo de Componentes de UI e Renderização (`ui-components.js`)
+
+- **Objetivo:** Desacoplar a lógica de negócio da renderização da interface, seguindo o princípio de responsabilidade única. Abstrai a criação de elementos de UI comuns e complexos.
+- **Implementação:**
+  - **Funções de Renderização (Template Engine Simples):** O módulo exporta funções puras que recebem dados e retornam strings de HTML (ex: `renderWbsGroup`, `renderItemEntry`, `renderMessageBox`, `renderDashboardSkeleton`). As páginas de lógica (`.js`) agora chamam essas funções em vez de conterem grandes blocos de template literals, tornando o código mais limpo.
+  - **Abstração de Componentes (Componentização):** A classe `Modal` encapsula todo o comportamento de um modal (abrir, fechar, gerenciar foco, conteúdo dinâmico), sendo reutilizada em toda a aplicação. Isso centraliza a lógica de componentes de UI complexos.
+- **Benefício:** Cria um "design system" primitivo. Garante consistência visual e funcional em toda a aplicação. Modificar a aparência de um elemento (como um "skeleton" de carregamento) agora requer a edição de uma única função, em vez de múltiplas páginas. Prepara o terreno para uma migração mais fácil para um framework baseado em componentes como o React/Next.js.
+
+## 🚀 12. Roadmap de Evolução Técnica
+
+Para garantir a escalabilidade, manutenibilidade e performance do ChronoFlow a longo prazo, o próximo grande passo na evolução técnica do projeto é a migração de uma arquitetura de múltiplos arquivos HTML para uma **Single-Page Application (SPA)** moderna.
+
+### 12.1. Tecnologia Alvo: Next.js e Vercel
+
+- **Framework:** A tecnologia escolhida para a reescrita é o **Next.js**, um framework React robusto e opinativo. A migração para um modelo de componentes declarativos (JSX) e um sistema de roteamento unificado trará enormes benefícios em organização de código, reutilização de componentes e experiência de desenvolvimento.
+- **Hospedagem:** A aplicação será hospedada na **Vercel**, a plataforma criada pelos desenvolvedores do Next.js. Isso garantirá uma integração perfeita, deploys automáticos via Git, performance otimizada globalmente e suporte nativo a todos os recursos do framework.
+
+### 12.2. Vantagens da Migração
+
+- **Performance para o Usuário:** Uma das melhorias mais significativas será mover o processamento pesado dos arquivos `.xer` do navegador do cliente para o lado do servidor, utilizando as **API Routes** do Next.js. Isso resultará em uma interface muito mais rápida e responsiva, que não travará mesmo com arquivos de cronograma muito grandes.
+- **Manutenibilidade:** A decomposição da interface em componentes reutilizáveis e a centralização do estado da aplicação tornarão o código mais limpo, mais fácil de entender e de dar manutenção.
+- **Escalabilidade:** A arquitetura do Next.js, combinada com a Vercel, fornece um caminho claro para escalar a aplicação no futuro, seja adicionando novas funcionalidades complexas ou lidando com um volume maior de dados e usuários.
+
+## 🚀 13. Melhorias Futuras
+
+### 13.1. 🧠 Análise Inteligente com IA (Google Gemini)
+
+A próxima grande evolução do ChronoFlow é a integração com a **API do Google Gemini** para transformar a ferramenta de uma plataforma de visualização para um assistente de projeto proativo.
+
+- **Objetivo:** Automatizar a análise de cenários complexos e fornecer insights acionáveis diretamente na interface.
+- **Funcionalidade Inicial:**
+  - **Análise de Restrições:** Uma nova funcionalidade será adicionada onde o usuário poderá selecionar um conjunto de restrições pendentes. O ChronoFlow enviará os detalhes dessas restrições (descrição, categoria, atividades impactadas, prazos) para a API do Gemini.
+  - **Plano de Ação Sugerido:** O Gemini analisará os dados e retornará um plano de ação estruturado, sugerindo etapas concretas para mitigar cada restrição, possíveis responsáveis e uma ordem de prioridade.
+- **Benefício:** Reduzir drasticamente o tempo que os gerentes de projeto gastam em análises manuais, permitindo que eles se concentrem na tomada de decisão e na execução das ações recomendadas pela IA.
+
+### 13.2. Outras Melhorias Planejadas
+
 - **🔗 Integração com APIs:** Conectar-se diretamente a sistemas de planejamento para automatizar o upload de dados.
 - **🔧 Dashboards Personalizáveis:** Permitir que os usuários criem seus próprios dashboards.
 - **📈 Análise de PPC (Percentual do Plano Concluído):** Implementar métricas LEAN para medir a confiabilidade do planejamento semanal.

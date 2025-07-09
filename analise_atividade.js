@@ -1,5 +1,7 @@
 import { initializationError, showFirebaseError } from "./firebase-config.js";
 import * as utils from "./utils.js";
+import { dataLoader } from "./data-loader.js";
+import { renderMessageBox, renderAnalysisSkeleton } from "./ui-components.js";
 
 // First, check if Firebase is configured. If not, show an error and stop.
 if (initializationError) {
@@ -8,10 +10,8 @@ if (initializationError) {
   throw initializationError; // Halt script execution
 }
 
-// If no error, import other modules and run the app
-import { storage } from "./storage.js";
-
 // ===== Page Script Starts Here =====
+
 (async () => {
   utils.insertHeader();
 
@@ -23,20 +23,19 @@ import { storage } from "./storage.js";
     "task-selector-skeleton"
   );
 
-  let projectBase = null,
-    projectVersions = {},
+  let projectBase,
+    projectVersions,
     mainResource,
     tomSelectInstance,
     activityMapping,
-    allTaskRsrcData = [],
     weeksData,
     wbsMap,
     chartInstance,
     latestVersionId,
     customValuesData,
-    activityDetailsMap = new Map(),
-    milestonesMap = new Map(),
-    itemMilestoneMap = new Map();
+    activityDetailsMap,
+    milestonesMap,
+    itemMilestoneMap;
 
   const STATUS_MAP = {
     TK_Complete: { text: "Concluída", class: "status-complete" },
@@ -71,8 +70,18 @@ import { storage } from "./storage.js";
 
   // --- Carregamento Inicial ---
   try {
-    projectBase = await storage.getProjectBase();
-    projectVersions = await storage.getProjectVersions();
+    const coreData = await dataLoader.loadCoreData();
+    projectBase = coreData.projectBase;
+    projectVersions = coreData.projectVersions;
+    mainResource = coreData.mainResource;
+    activityMapping = coreData.activityMapping;
+    weeksData = coreData.weeksData;
+    customValuesData = coreData.customValuesMap;
+    activityDetailsMap = coreData.activityDetailsMap;
+    milestonesMap = coreData.milestonesMap;
+    itemMilestoneMap = coreData.itemMilestoneMap;
+    wbsMap = coreData.wbsMap;
+    latestVersionId = coreData.latestVersionId;
 
     if (!projectBase || Object.keys(projectBase).length === 0) {
       projectInfo.textContent =
@@ -89,45 +98,6 @@ import { storage } from "./storage.js";
       return;
     }
 
-    [
-      mainResource,
-      activityMapping,
-      weeksData,
-      customValuesData,
-      activityDetailsMap,
-      milestonesMap,
-      itemMilestoneMap,
-    ] = await Promise.all([
-      storage.getData(storage.APP_KEYS.MAIN_RESOURCE_KEY),
-      storage.getData(storage.APP_KEYS.ACTIVITY_MAPPING_KEY),
-      storage.getData(storage.APP_KEYS.WEEKS_DATA_KEY),
-      storage
-        .getData(storage.APP_KEYS.CUSTOM_VALUES_KEY)
-        .then((d) => new Map(d.map((i) => [i.id, i]))),
-      storage.getActivityDetails().then((d) =>
-        d.reduce((acc, detail) => {
-          if (!acc.has(detail.parentId)) acc.set(detail.parentId, []);
-          acc.get(detail.parentId).push(detail);
-          return acc;
-        }, new Map())
-      ),
-      storage
-        .getData(storage.APP_KEYS.MILESTONES_LIST_KEY)
-        .then((d) => new Map(d.map((m) => [m.id, m]))),
-      storage.getData(storage.APP_KEYS.MILESTONE_LINKS_KEY).then((d) =>
-        d.reduce((acc, link) => {
-          if (!acc.has(link.itemId)) acc.set(link.itemId, []);
-          acc.get(link.itemId).push(link.milestoneId);
-          return acc;
-        }, new Map())
-      ),
-    ]);
-
-    allTaskRsrcData = Object.values(projectVersions).flatMap(
-      (version) => version.TASKRSRC?.rows || []
-    );
-
-    latestVersionId = utils.getLatestProjectId(projectVersions);
     if (!latestVersionId) {
       projectInfo.textContent =
         "Não foi possível encontrar a versão mais recente do projeto.";
@@ -136,10 +106,6 @@ import { storage } from "./storage.js";
     }
 
     const latestVersion = projectVersions[latestVersionId];
-    wbsMap = new Map(
-      (projectBase.WBS_HIERARCHY?.rows || []).map((w) => [w.stable_wbs_id, w])
-    );
-
     const lastRecalcDate = latestVersion.PROJECT?.rows[0]?.last_recalc_date;
     const recalcWeek = utils.getWeekForDate(lastRecalcDate, weeksData);
 
@@ -156,36 +122,17 @@ import { storage } from "./storage.js";
     taskSelectorWrapper.classList.remove("hidden");
   } catch (e) {
     console.error("Erro ao carregar a página de análise:", e);
-    analysisOutput.innerHTML = `<div class="message-box" role="alert" style="color: #ef4444;">Erro ao carregar dados: ${e.message}</div>`;
+    analysisOutput.innerHTML = renderMessageBox(
+      `Erro ao carregar dados: ${e.message}`,
+      "error"
+    );
     taskSelectorSkeleton.classList.add("hidden");
   }
 
   async function populateTaskSelect() {
     if (tomSelectInstance) tomSelectInstance.destroy();
 
-    const tasks = projectBase?.TASK?.rows || [];
-    const mapping = await storage.getData(
-      storage.APP_KEYS.ACTIVITY_MAPPING_KEY
-    );
-    const groupedTaskCodes = new Set(mapping.flatMap((g) => g.taskCodes));
-
-    const taskOptions = tasks
-      .filter((t) => !groupedTaskCodes.has(t.task_code))
-      .map((t) => ({
-        value: t.task_code,
-        text: `${t.task_code} - ${t.task_name}`,
-        type: "task",
-      }));
-
-    const groupOptions = mapping.map((group) => ({
-      value: `group::${group.groupId}`,
-      text: `[Grupo] ${group.groupName}`,
-      type: "group",
-    }));
-
-    const allOptions = [...taskOptions, ...groupOptions].sort((a, b) =>
-      a.text.localeCompare(b.text)
-    );
+    const allOptions = await dataLoader.getSelectableItems();
 
     tomSelectInstance = new TomSelect(taskSelectEl, {
       options: allOptions,
@@ -195,43 +142,16 @@ import { storage } from "./storage.js";
     });
   }
 
-  function renderAnalysisSkeleton() {
-    analysisOutput.innerHTML = `
-        <div role="status" aria-label="Carregando análise da atividade">
-            <div class="card p-6 bg-secondary">
-                <div class="flex justify-between items-start mb-2">
-                    <div class="skeleton skeleton-title" style="width: 70%;"></div>
-                    <div class="skeleton skeleton-block" style="width: 100px; height: 1.75rem;"></div>
-                </div>
-                <div class="skeleton skeleton-text mb-4" style="width: 90%;"></div>
-                <div class="info-grid">
-                    ${Array(5)
-                      .fill(
-                        '<div class="info-item"><div class="skeleton skeleton-text" style="width: 50%;"></div><div class="skeleton skeleton-title" style="width: 80%; height: 1.25rem;"></div></div>'
-                      )
-                      .join("")}
-                </div>
-            </div>
-            <div class="card p-6 bg-secondary mt-6">
-                <div class="skeleton skeleton-title" style="width: 40%;"></div>
-                <div class="skeleton skeleton-block" style="height: 150px;"></div>
-            </div>
-             <div class="card p-6 bg-secondary mt-6">
-                <div class="skeleton skeleton-title" style="width: 60%;"></div>
-                <div class="skeleton skeleton-block" style="height: 200px;"></div>
-            </div>
-            <div class="sr-only" aria-live="polite">Carregando dados.</div>
-        </div>
-    `;
-  }
-
   taskSelectEl.addEventListener("change", (e) => {
     const selectedValue = e.target.value;
     if (!selectedValue) {
-      analysisOutput.innerHTML = `<div class="message-box"><p>Selecione uma atividade ou grupo.</p></div>`;
+      analysisOutput.innerHTML = renderMessageBox(
+        "Selecione uma atividade ou grupo.",
+        "info"
+      );
       return;
     }
-    renderAnalysisSkeleton();
+    analysisOutput.innerHTML = renderAnalysisSkeleton();
 
     setTimeout(() => {
       analysisOutput.setAttribute("aria-live", "polite");
@@ -247,12 +167,10 @@ import { storage } from "./storage.js";
   function renderMilestonesCard(itemId, trendEndDate, wbsPath = []) {
     const allApplicableMilestoneIds = new Set();
 
-    // Add milestones directly linked to the item
     (itemMilestoneMap.get(itemId) || []).forEach((id) =>
       allApplicableMilestoneIds.add(id)
     );
 
-    // Add milestones from parent WBS nodes
     wbsPath.forEach((wbsNode) => {
       (itemMilestoneMap.get(wbsNode.stable_wbs_id) || []).forEach((id) =>
         allApplicableMilestoneIds.add(id)
@@ -428,7 +346,10 @@ import { storage } from "./storage.js";
     const latestVersion = projectVersions[latestVersionId];
     const task = projectBase.TASK.rows.find((t) => t.task_code === taskCode);
     if (!task) {
-      analysisOutput.innerHTML = `<div class="message-box">Atividade "${taskCode}" não encontrada.</div>`;
+      analysisOutput.innerHTML = renderMessageBox(
+        `Atividade "${taskCode}" não encontrada.`,
+        "error"
+      );
       return;
     }
 
@@ -467,6 +388,9 @@ import { storage } from "./storage.js";
         .join("");
     };
 
+    const allTaskRsrcData = Object.values(projectVersions).flatMap(
+      (version) => version.TASKRSRC?.rows || []
+    );
     const weeklyRecords = allTaskRsrcData.filter(
       (r) => r.task_id_code === taskCode
     );
@@ -689,7 +613,10 @@ import { storage } from "./storage.js";
       group.taskCodes.includes(t.task_code)
     );
     if (tasksInGroup.length === 0) {
-      analysisOutput.innerHTML = `<div class="message-box">Nenhuma atividade para o grupo "${group.groupName}" no projeto.</div>`;
+      analysisOutput.innerHTML = renderMessageBox(
+        `Nenhuma atividade para o grupo "${group.groupName}" no projeto.`,
+        "error"
+      );
       return;
     }
 
@@ -793,45 +720,16 @@ import { storage } from "./storage.js";
           )}
           ${renderExecutionPlanCard(fullGroupId)}
           <div class="card p-6 bg-secondary">
-              <h3 class="text-xl font-bold text-primary mb-4">Quantidades Consolidadas por Recurso (Cronograma da Semana)</h3>
-               <div class="table-container"><table><thead><tr><th>Recurso</th><th class="text-right">Total Planejado</th><th class="text-right">Total Realizado</th><th class="text-right">Total Restante</th><th class="text-right">% Progresso</th></tr></thead><tbody>${resourcesHtml}</tbody></table></div>
-          </div>
-          <div class="card p-6 bg-secondary">
-              <h3 class="text-xl font-bold text-primary mb-4">Atividades no Grupo</h3>
-              <div class="table-container"><table><thead><tr><th>Código</th><th>Nome</th><th>Status</th><th class="text-right">Qtd. Planejada</th><th>Início</th><th>Término</th></tr></thead><tbody>
-                    ${tasksInGroup
-                      .sort(
-                        (a, b) =>
-                          (new Date(a.target_start_date?.replace(" ", "T")) ||
-                            0) -
-                          (new Date(b.target_start_date?.replace(" ", "T")) ||
-                            0)
-                      )
-                      .map((t) => {
-                        const statusInfo = STATUS_MAP[t.status_code] || {
-                          text: t.status_code,
-                          class: "",
-                        };
-                        const plannedQty = parseFloat(t.target_equip_qty || 0);
-                        return `<tr><td class="font-mono">${
-                          t.task_code
-                        }</td><td>${t.task_name}</td><td><span class="badge ${
-                          statusInfo.class
-                        }">${
-                          statusInfo.text
-                        }</span></td><td class="text-right">${utils.formatNumberBR(
-                          plannedQty
-                        )}</td><td>${utils.formatBrazilianDate(
-                          t.act_start_date || t.restart_date
-                        )}</td><td>${utils.formatBrazilianDate(
-                          t.act_end_date || t.reend_date
-                        )}</td></tr>`;
-                      })
-                      .join("")}
-              </tbody></table></div>
+              <h2 class="text-xl font-bold text-primary mb-4">Recursos Agregados (Cronograma)</h2>
+              <div class="table-container">
+                  <table>
+                      <thead><tr><th>Recurso</th><th class="text-right">Qtd. Planejada</th><th class="text-right">Qtd. Real</th><th class="text-right">Qtd. Restante</th><th class="text-right">% Avanço</th></tr></thead>
+                      <tbody>${resourcesHtml}</tbody>
+                  </table>
+              </div>
           </div>
       </div>
-      `;
+    `;
     analysisOutput.innerHTML = html;
   }
 })();

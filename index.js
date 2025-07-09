@@ -9,8 +9,14 @@ if (initializationError) {
 }
 
 // If no error, import other modules and run the app
-import { storage } from "./storage.js";
 import { processXerFile } from "./xer-parser.js";
+import { storage } from "./storage.js";
+import { dataLoader } from "./data-loader.js";
+import {
+  renderDashboardSkeleton,
+  renderMessageBox,
+  renderProjectListItem,
+} from "./ui-components.js";
 
 // ===== Page Script Starts Here =====
 utils.insertHeader();
@@ -113,7 +119,10 @@ async function handleFiles(files, source) {
   if (files.length === 0) return;
   const file = files[0];
   if (!file.name.toLowerCase().endsWith(".xer")) {
-    dashboardOutput.innerHTML = `<p class="message-box error">Por favor, selecione um arquivo com a extensão .xer.</p>`;
+    dashboardOutput.innerHTML = renderMessageBox(
+      "Por favor, selecione um arquivo com a extensão .xer.",
+      "error"
+    );
     fileFeedback.textContent =
       "Erro: Por favor, selecione um arquivo com a extensão .xer.";
     return;
@@ -134,7 +143,10 @@ async function processFile(file) {
   fileNameSpan.textContent = file.name;
   fileDisplay.classList.remove("hidden");
   fileFeedback.textContent = `Processando arquivo ${file.name}.`;
-  dashboardOutput.innerHTML = `<p class="message-box info" role="status">Processando e salvando arquivo... Isso pode levar alguns instantes.</p>`;
+  dashboardOutput.innerHTML = renderMessageBox(
+    "Processando e salvando arquivo... Isso pode levar alguns instantes.",
+    "info"
+  );
 
   const reader = new FileReader();
   reader.onload = async function (e) {
@@ -178,7 +190,10 @@ async function processFile(file) {
       console.error("Erro ao processar ou salvar o arquivo:", error);
       utils.showToast(`Erro ao processar: ${error.message}`, "error");
       fileFeedback.textContent = `Erro ao processar o arquivo: ${error.message}`;
-      dashboardOutput.innerHTML = `<p class="message-box error" role="alert">Erro ao processar o arquivo: ${error.message}.</p>`;
+      dashboardOutput.innerHTML = renderMessageBox(
+        `Erro ao processar o arquivo: ${error.message}.`,
+        "error"
+      );
     }
   };
   reader.readAsText(file, "ISO-8859-1");
@@ -259,13 +274,7 @@ function displayDashboard(projectVersions, weeksMapping) {
         ? `Semana ${weekNumber}`
         : "Semana não mapeada";
 
-      return `
-            <div class="project-list-item">
-              <div class="font-medium text-primary">${weekText} <span class="text-xs text-tertiary font-mono ml-2">(${versionId})</span></div>
-              <div class="text-secondary">Atualizado em: ${utils.formatBrazilianDate(
-                recalcDate
-              )}</div>
-            </div>`;
+      return renderProjectListItem(versionId, versionInfo, weekText);
     })
     .join("");
 
@@ -277,64 +286,43 @@ function displayDashboard(projectVersions, weeksMapping) {
         `;
 }
 
-function renderDashboardSkeleton() {
-  const skeletonItem = `
-        <div class="project-list-item">
-            <div class="flex-grow">
-                <div class="skeleton skeleton-text" style="width: 40%;"></div>
-            </div>
-            <div class="w-1/3">
-                <div class="skeleton skeleton-text"></div>
-            </div>
-        </div>
-    `;
-  dashboardOutput.innerHTML = `
-        <div>
-            <div class="skeleton skeleton-title mb-4" style="width: 300px;"></div>
-            <div class="space-y-2">
-                ${skeletonItem.repeat(3)}
-            </div>
-            <div class="sr-only" aria-live="polite">Carregando versões do projeto.</div>
-        </div>`;
-}
-
 async function loadDashboard() {
-  renderDashboardSkeleton();
+  dashboardOutput.innerHTML = renderDashboardSkeleton();
   dashboardSection.setAttribute("aria-busy", "true");
 
   try {
-    const projectBase = await storage.getProjectBase();
-    const projectVersions = await storage.getProjectVersions();
-    const weeksMapping = await storage.getData(storage.APP_KEYS.WEEKS_DATA_KEY);
+    const { projectBase, projectVersions, weeksData } =
+      await dataLoader.loadDashboardData();
 
     const versionIds = Object.keys(projectVersions);
 
     if (!projectBase || Object.keys(projectBase).length === 0) {
-      dashboardOutput.innerHTML = `
-              <div>
-                <p class="message-box info">Nenhuma informação de projeto carregada. Por favor, envie um arquivo .xer para iniciar.</p>
-              </div>
-            `;
+      dashboardOutput.innerHTML = renderMessageBox(
+        "Nenhuma informação de projeto carregada. Por favor, envie um arquivo .xer para iniciar.",
+        "info"
+      );
       return;
     }
 
     if (versionIds.length > 0) {
-      displayDashboard(projectVersions, weeksMapping);
+      displayDashboard(projectVersions, weeksData);
       fileDisplay.classList.remove("hidden");
       if (!fileNameSpan.textContent) {
         fileNameSpan.textContent =
           "Dados carregados do armazenamento em nuvem.";
       }
     } else {
-      dashboardOutput.innerHTML = `
-              <div>
-                <p class="message-box info">Dados base do projeto encontrados, mas nenhuma versão semanal foi carregada. Envie um arquivo .xer.</p>
-              </div>
-            `;
+      dashboardOutput.innerHTML = renderMessageBox(
+        "Dados base do projeto encontrados, mas nenhuma versão semanal foi carregada. Envie um arquivo .xer.",
+        "info"
+      );
     }
   } catch (error) {
     console.error("Erro ao carregar o dashboard:", error);
-    dashboardOutput.innerHTML = `<p class="message-box error" role="alert">Ocorreu um erro ao carregar o dashboard: ${error.message}.</p>`;
+    dashboardOutput.innerHTML = renderMessageBox(
+      `Ocorreu um erro ao carregar o dashboard: ${error.message}.`,
+      "error"
+    );
   } finally {
     dashboardSection.setAttribute("aria-busy", "false");
   }

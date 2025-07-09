@@ -10,6 +10,8 @@ import {
   getDownloadURL,
   deleteObject,
 } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-storage.js";
+import { Modal, renderSixWeekViewSkeleton } from "./ui-components.js";
+import { dataLoader } from "./data-loader.js";
 
 // First, check if Firebase is configured. If not, show an error and stop.
 if (initializationError) {
@@ -24,59 +26,15 @@ import { storage } from "./storage.js";
 // ===== Page Script Starts Here =====
 (async () => {
   utils.insertHeader();
+  const pageModal = new Modal("page-modal");
 
   const dashboardOutput = document.getElementById("dashboard-output");
-  const pageSubtitle = document.getElementById("page-subtitle");
   const prevBtn = document.getElementById("prev-btn");
   const nextBtn = document.getElementById("next-btn");
   const indicatorsContainer = document.getElementById("week-indicators");
   const filterControls = document.getElementById("filter-controls");
   const restrictionFilterControls = document.getElementById(
     "restriction-filter-controls"
-  );
-
-  const modal = document.getElementById("restriction-modal");
-  const modalContent = modal.querySelector(".modal-content");
-  const modalItemName = document.getElementById("modal-item-name");
-  const modalBody = document.getElementById("modal-body");
-  const modalCloseBtn = document.getElementById("modal-close-btn");
-
-  const checklistRunnerModal = document.getElementById(
-    "checklist-runner-modal"
-  );
-  const checklistRunnerModalTitle = document.getElementById(
-    "checklist-runner-modal-title"
-  );
-  const checklistRunnerModalSubtitle = document.getElementById(
-    "checklist-runner-modal-subtitle"
-  );
-  const checklistRunnerModalBody = document.getElementById(
-    "checklist-runner-modal-body"
-  );
-  const checklistRunnerModalCloseBtn = document.getElementById(
-    "checklist-runner-modal-close-btn"
-  );
-  const checklistRunnerCancelBtn = document.getElementById(
-    "checklist-runner-cancel-btn"
-  );
-  const checklistRunnerSaveBtn = document.getElementById(
-    "checklist-runner-save-btn"
-  );
-
-  const restrictionLinkerModal = document.getElementById(
-    "restriction-linker-modal"
-  );
-  const restrictionLinkerBody = document.getElementById(
-    "restriction-linker-body"
-  );
-  const restrictionLinkerCloseBtn = document.getElementById(
-    "restriction-linker-close-btn"
-  );
-  const restrictionLinkerCancelBtn = document.getElementById(
-    "restriction-linker-cancel-btn"
-  );
-  const restrictionLinkerSaveBtn = document.getElementById(
-    "restriction-linker-save-btn"
   );
 
   const fullscreenViewer = document.getElementById("fullscreen-viewer");
@@ -106,79 +64,44 @@ import { storage } from "./storage.js";
   let currentFilter = "all";
   let currentRestrictionFilter = "all";
   let currentOpenItemId = null;
-  let projectName = "Projeto";
   let activeTomSelect = null;
-  let lastFocusedElement = null; // For accessibility
   let activeRestrictionLinkerItem = null; // For the new linker workspace
   let restrictionLinksInMemory = new Map(); // For the new linker workspace
 
   try {
-    const projectBase = await storage.getProjectBase();
-    const projectVersions = await storage.getProjectVersions();
+    const coreData = await dataLoader.loadCoreData();
 
-    [
-      weeksData,
-      activityMapping,
-      restrictionsList,
-      restrictionLinks,
-      checklists,
-      checklistRuns,
-    ] = await Promise.all([
-      storage.getData(storage.APP_KEYS.WEEKS_DATA_KEY),
-      storage.getData(storage.APP_KEYS.ACTIVITY_MAPPING_KEY),
-      storage.getData(storage.APP_KEYS.RESTRICTIONS_LIST_KEY),
-      storage.getData(storage.APP_KEYS.RESTRICTION_LINKS_KEY),
-      storage.getData(storage.APP_KEYS.CHECKLISTS_KEY),
-      storage.getData(storage.APP_KEYS.CHECKLIST_RUNS_KEY),
-    ]);
+    // Assign all loaded data to local variables
+    fullTaskList = coreData.projectBase?.TASK?.rows || [];
+    wbsHierarchy = coreData.projectBase?.WBS_HIERARCHY?.rows || [];
+    wbsMap = coreData.wbsMap;
+    weeksData = coreData.weeksData;
+    activityMapping = coreData.activityMapping;
+    restrictionsList = coreData.restrictionsList;
+    restrictionLinks = coreData.restrictionLinks;
+    checklists = coreData.checklists;
+    checklistRuns = coreData.checklistRuns;
+    checklistRunsByWbsId = coreData.checklistRunsByWbsId;
+    customValuesData = coreData.customValuesMap;
+    activityMediaMap = coreData.activityMediaMap;
+    activityDetailsMap = coreData.activityDetailsMap;
+    itemRestrictionInfoMap = coreData.itemRestrictionInfoMap;
+    milestonesMap = coreData.milestonesMap;
+    itemMilestoneMap = coreData.itemMilestoneMap;
 
-    checklistRunsByWbsId = new Map(
-      checklistRuns.map((run) => [run.wbsId, run])
-    );
-
-    const milestonesList = await storage.getData(
-      storage.APP_KEYS.MILESTONES_LIST_KEY
-    );
-    const milestoneLinks = await storage.getData(
-      storage.APP_KEYS.MILESTONE_LINKS_KEY
-    );
-
-    milestonesMap = new Map(milestonesList.map((m) => [m.id, m]));
-    milestoneLinks.forEach((link) => {
-      if (!itemMilestoneMap.has(link.itemId)) {
-        itemMilestoneMap.set(link.itemId, []);
-      }
-      itemMilestoneMap.get(link.itemId).push(link.milestoneId);
-    });
-
-    const customValuesRaw = await storage.getData(
-      storage.APP_KEYS.CUSTOM_VALUES_KEY
-    );
-    customValuesData = new Map(customValuesRaw.map((item) => [item.id, item]));
-
-    const activityMedia = await storage.getActivityMedia();
-    activityMediaMap = new Map(
-      activityMedia.map((item) => [
-        item.id,
-        { imageUrl: item.imageUrl, storagePath: item.storagePath },
-      ])
-    );
-
-    const activityDetails = await storage.getActivityDetails();
-    activityDetails.forEach((detail) => {
-      if (!activityDetailsMap.has(detail.parentId)) {
-        activityDetailsMap.set(detail.parentId, []);
-      }
-      activityDetailsMap.get(detail.parentId).push(detail);
-    });
-
-    if (!projectBase || Object.keys(projectBase).length === 0) {
+    if (
+      !coreData.projectBase ||
+      Object.keys(coreData.projectBase).length === 0
+    ) {
       dashboardOutput.innerHTML = `<div class="message-box col-span-full">Nenhum projeto base encontrado. Faça o upload de um arquivo .xer.</div>`;
       filterControls.innerHTML = "";
       indicatorsContainer.innerHTML = "";
       return;
     }
-    if (Object.keys(projectVersions).length === 0) {
+    if (
+      !coreData.projectVersions ||
+      Object.keys(coreData.projectVersions).length === 0
+    ) {
       dashboardOutput.innerHTML = `<div class="message-box col-span-full">Nenhuma versão de projeto encontrada. Faça o upload de um arquivo .xer.</div>`;
       filterControls.innerHTML = "";
       indicatorsContainer.innerHTML = "";
@@ -190,39 +113,6 @@ import { storage } from "./storage.js";
       indicatorsContainer.innerHTML = "";
       return;
     }
-
-    const latestVersionId = utils.getLatestProjectId(projectVersions);
-    const latestVersion = projectVersions[latestVersionId];
-    projectName = latestVersion?.PROJECT?.rows[0]?.proj_name || "Projeto";
-
-    fullTaskList = projectBase.TASK?.rows || [];
-    wbsHierarchy = projectBase.WBS_HIERARCHY?.rows || [];
-    wbsMap = new Map(wbsHierarchy.map((w) => [w.stable_wbs_id, w]));
-
-    // Pre-process restriction information for performance
-    restrictionLinks.forEach((link) => {
-      const restriction = restrictionsList.find(
-        (r) => r.id === link.restrictionId
-      );
-      if (!restriction) return;
-
-      if (!itemRestrictionInfoMap.has(link.itemId)) {
-        itemRestrictionInfoMap.set(link.itemId, {
-          hasPending: false,
-          pendingCount: 0,
-          pendingCategories: new Set(),
-        });
-      }
-
-      const info = itemRestrictionInfoMap.get(link.itemId);
-      if (restriction.status === "pending") {
-        info.hasPending = true;
-        info.pendingCount++;
-        if (restriction.category) {
-          info.pendingCategories.add(restriction.category);
-        }
-      }
-    });
 
     const currentWeek = utils.getWeekForDate(new Date(), weeksData);
     if (currentWeek === null) {
@@ -265,11 +155,10 @@ import { storage } from "./storage.js";
     setupNavigation();
     await renderCurrentWeekView();
     setupEventListeners();
-    setupModal();
     setupFullscreenViewer();
   } catch (e) {
     console.error(e);
-    dashboardOutput.innerHTML = `<div class="message-box" role="alert" style="color: #b91c1c;">Erro: ${e.message}</div>`;
+    dashboardOutput.innerHTML = `<div class="message-box error" role="alert">Erro: ${e.message}</div>`;
   }
 
   async function processAndCacheWeekData(weekNumber) {
@@ -531,18 +420,7 @@ import { storage } from "./storage.js";
     const weekNumber = upcomingWeeks[currentWeekIndex];
     if (!groupedByWeek[weekNumber]) {
       // Show skeleton on the card itself before processing
-      dashboardOutput.innerHTML = `
-          <div class="card p-4 md:p-8 bg-secondary" aria-live="polite" aria-busy="true">
-              <div class="sr-only">Carregando dados da semana.</div>
-               <div class="week-card-header flex flex-col items-center md:items-start text-center md:text-left md:flex-row md:items-center justify-between border-b-2 border-border-accent pb-3 mb-3 md:border-b md:border-border-primary">
-                  <div>
-                      <div class="skeleton skeleton-title" style="width: 250px; height: 1.75rem;"></div>
-                      <div class="skeleton skeleton-text mt-2" style="width: 200px;"></div>
-                  </div>
-                  <div class="skeleton" style="width: 120px; height: 38px; border-radius: 0.5rem;"></div>
-              </div>
-              <p class="text-center text-tertiary italic p-8">Processando dados da semana...</p>
-          </div>`;
+      dashboardOutput.innerHTML = renderSixWeekViewSkeleton();
       await processAndCacheWeekData(weekNumber);
     }
 
@@ -890,23 +768,6 @@ import { storage } from "./storage.js";
     }
   }
 
-  function toggleAllWbs(event) {
-    const btn = event.target;
-    const isExpanding = btn.dataset.state === "collapsed";
-    const allTitleButtons = Array.from(
-      dashboardOutput.querySelectorAll(".wbs-title-toggle-area")
-    );
-    allTitleButtons.forEach((button) => {
-      const isCurrentlyExpanded =
-        button.getAttribute("aria-expanded") === "true";
-      if (isExpanding !== isCurrentlyExpanded) {
-        button.click();
-      }
-    });
-    btn.dataset.state = isExpanding ? "expanded" : "collapsed";
-    btn.textContent = isExpanding ? "Recolher Tudo" : "Expandir Tudo";
-  }
-
   async function expandAllWbs() {
     const allTitleButtons = Array.from(
       dashboardOutput.querySelectorAll(".wbs-title-toggle-area")
@@ -922,6 +783,33 @@ import { storage } from "./storage.js";
     if (toggleAllBtn) {
       toggleAllBtn.dataset.state = "expanded";
       toggleAllBtn.textContent = "Recolher Tudo";
+    }
+  }
+
+  function toggleAllWbs(e) {
+    const btn = e.target;
+    const isCollapsed = btn.dataset.state === "collapsed";
+    const allTitleButtons = Array.from(
+      dashboardOutput.querySelectorAll(".wbs-title-toggle-area")
+    );
+
+    allTitleButtons.forEach((button) => {
+      const isCurrentlyExpanded =
+        button.getAttribute("aria-expanded") === "true";
+      if (
+        (isCollapsed && !isCurrentlyExpanded) ||
+        (!isCollapsed && isCurrentlyExpanded)
+      ) {
+        toggleWbsContent(button);
+      }
+    });
+
+    if (isCollapsed) {
+      btn.dataset.state = "expanded";
+      btn.textContent = "Recolher Tudo";
+    } else {
+      btn.dataset.state = "collapsed";
+      btn.textContent = "Expandir Tudo";
     }
   }
 
@@ -1052,6 +940,11 @@ import { storage } from "./storage.js";
         await expandAllWbs();
       }
     });
+
+    const modalBodyEl = document.querySelector("#page-modal #modal-body");
+    if (modalBodyEl) {
+      modalBodyEl.addEventListener("click", handleModalBodyClick);
+    }
   }
 
   function updateNavigation() {
@@ -1063,6 +956,20 @@ import { storage } from "./storage.js";
         dot.classList.toggle("active", index === currentWeekIndex);
         dot.setAttribute("aria-pressed", index === currentWeekIndex);
       });
+  }
+
+  function setupFullscreenViewer() {
+    fullscreenViewer.addEventListener("click", () => {
+      fullscreenViewer.classList.add("hidden");
+    });
+    fullscreenCloseBtn.addEventListener("click", () => {
+      fullscreenViewer.classList.add("hidden");
+    });
+  }
+
+  function openFullscreen(src) {
+    fullscreenImage.src = src;
+    fullscreenViewer.classList.remove("hidden");
   }
 
   // --- Modal Functions ---
@@ -1231,12 +1138,9 @@ import { storage } from "./storage.js";
 
   async function openModal(itemId, itemName) {
     currentOpenItemId = itemId;
-    lastFocusedElement = document.activeElement;
-    modalItemName.textContent = itemName;
-
     const itemData = findItemInWeekTree(currentOpenItemId);
 
-    modalBody.innerHTML = `
+    const bodyHtml = `
         <div id="modal-alerts-container">${_renderMilestoneAlertForModal(
           itemData
         )}</div>
@@ -1247,11 +1151,28 @@ import { storage } from "./storage.js";
           ${_renderExecutionPlanContainer()}
         </div>`;
 
-    setupPhotoEventListeners();
-    await renderItemRestrictionsList();
-    modal.classList.add("active");
-    document.body.classList.add("modal-open");
-    modalContent.focus();
+    pageModal.open({
+      title: itemName,
+      subtitle: "Detalhes da Atividade/Grupo",
+      bodyHtml: bodyHtml,
+      customClass: "restriction-view-modal modal-large",
+      showFooter: false,
+      onOpen: () => {
+        const modalEl = document.getElementById("page-modal");
+        modalEl.addEventListener("paste", handlePhotoPaste);
+        setupPhotoEventListeners();
+        renderItemRestrictionsList();
+      },
+      onClose: () => {
+        const modalEl = document.getElementById("page-modal");
+        modalEl.removeEventListener("paste", handlePhotoPaste);
+        if (activeTomSelect) {
+          activeTomSelect.destroy();
+          activeTomSelect = null;
+        }
+        currentOpenItemId = null;
+      },
+    });
   }
 
   function renderPhotoContent() {
@@ -1315,7 +1236,6 @@ import { storage } from "./storage.js";
       )
     );
     photoWrapper.addEventListener("drop", handlePhotoDrop, false);
-    modal.addEventListener("paste", handlePhotoPaste);
   }
 
   function handlePhotoDrop(e) {
@@ -1325,7 +1245,6 @@ import { storage } from "./storage.js";
   }
 
   function handlePhotoPaste(e) {
-    if (!modal.classList.contains("active")) return;
     const items = e.clipboardData.items;
     for (let i = 0; i < items.length; i++) {
       if (items[i].type.indexOf("image") !== -1) {
@@ -1450,13 +1369,26 @@ import { storage } from "./storage.js";
           restr.status === "pending"
             ? "status-pending-restr"
             : "status-resolved-restr";
-        html += `<div class="restriction-item text-sm"><div class="flex justify-between items-start"><div><p class="font-semibold text-primary">${
-          restr.desc
-        }</p><p class="text-tertiary">Prazo: ${utils.formatBrazilianDate(
-          restr.due
-        )}</p></div><span class="badge ${statusClass}">${
+        html += `<div class="restriction-item text-sm">
+          <div class="flex justify-between items-start gap-4">
+              <div>
+                  <p class="font-semibold text-primary">${restr.desc}</p>
+                  <p class="text-tertiary mt-1">Prazo: ${utils.formatBrazilianDate(
+                    restr.due
+                  )}</p>
+              </div>
+              <div class="flex flex-col items-end gap-1 flex-shrink-0 text-right">
+                  <span class="badge ${statusClass}">${
           restr.status === "pending" ? "Pendente" : "Resolvido"
-        }</span></div></div>`;
+        }</span>
+                  ${
+                    restr.category
+                      ? `<span class="restriction-category-badge mt-1">${restr.category}</span>`
+                      : ""
+                  }
+              </div>
+          </div>
+        </div>`;
       }
     });
     html += "</div>";
@@ -1668,16 +1600,11 @@ import { storage } from "./storage.js";
       </div>`;
   }
 
-  async function saveRestrictionLinks() {
-    const tomSelect = activeTomSelect;
-    if (!tomSelect || !currentOpenItemId) return;
-
-    const btn = document.getElementById("save-restriction-links-btn");
-    btn.disabled = true;
-    btn.textContent = "Salvando...";
+  async function saveRestrictionLinks(modalInstance) {
+    if (!activeTomSelect || !currentOpenItemId) return;
 
     try {
-      const selectedIds = new Set(tomSelect.getValue());
+      const selectedIds = new Set(activeTomSelect.getValue());
       const otherLinks = restrictionLinks.filter(
         (l) => l.itemId !== currentOpenItemId
       );
@@ -1742,885 +1669,483 @@ import { storage } from "./storage.js";
       }
 
       utils.showToast("Vínculos de restrição salvos!", "success");
+      modalInstance.close();
     } catch (error) {
       utils.showToast(`Erro ao salvar: ${error.message}`, "error");
-    } finally {
-      if (activeTomSelect) {
-        activeTomSelect.destroy();
-        activeTomSelect = null;
-      }
-      btn.disabled = false;
-      btn.textContent = "Adicionar/Editar Vínculos";
+      throw error;
     }
   }
 
-  function setupModal() {
-    modalCloseBtn.addEventListener("click", closeModal);
-    modal.addEventListener("click", (e) => {
-      if (e.target === modal) closeModal();
-    });
+  async function handleModalBodyClick(e) {
+    if (e.target.id === "add-restriction-link-btn") {
+      openRestrictionLinkerWorkspace([], currentOpenItemId, true); // Open linker for existing item
+      return;
+    }
 
-    // Checklist Runner Modal
-    checklistRunnerModalCloseBtn.addEventListener(
-      "click",
-      closeChecklistRunnerModal
-    );
-    checklistRunnerCancelBtn.addEventListener(
-      "click",
-      closeChecklistRunnerModal
-    );
-    checklistRunnerModal.addEventListener("click", (e) => {
-      if (e.target === checklistRunnerModal) closeChecklistRunnerModal();
-    });
+    if (e.target.id === "create-new-restriction-btn") {
+      renderNewRestrictionFormForModal();
+      return;
+    }
 
-    // Restriction Linker Modal
-    restrictionLinkerCloseBtn.addEventListener(
-      "click",
-      closeRestrictionLinkerModal
-    );
-    restrictionLinkerCancelBtn.addEventListener(
-      "click",
-      closeRestrictionLinkerModal
-    );
-    restrictionLinkerSaveBtn.addEventListener(
-      "click",
-      saveRestrictionLinksFromWorkspace
-    );
-    restrictionLinkerModal.addEventListener("click", (e) => {
-      if (e.target === restrictionLinkerModal) closeRestrictionLinkerModal();
-    });
-
-    modalBody.addEventListener("click", async (e) => {
-      if (e.target.id === "add-restriction-link-btn") {
-        e.target.textContent = "Carregando...";
-        e.target.disabled = true;
-        const itemLinks = restrictionLinks
-          .filter((l) => l.itemId === currentOpenItemId)
-          .map((l) => l.restrictionId);
-        const options = restrictionsList.map((r) => ({
-          value: r.id,
-          text: r.desc,
-        }));
-        const listContainer = document.getElementById("item-restrictions-list");
-        listContainer.innerHTML = `
-                <select id="restriction-link-select" multiple></select>
-                <div class="text-right mt-2">
-                    <button id="cancel-restriction-link-btn" class="px-3 py-1.5 bg-gray-200 text-primary rounded-md hover:bg-gray-300 text-sm font-semibold">Cancelar</button>
-                    <button id="save-restriction-links-btn" class="px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-semibold ml-2">Salvar Vínculos</button>
-                </div>`;
-
-        activeTomSelect = new TomSelect("#restriction-link-select", {
-          options,
-          plugins: ["remove_button"],
-        });
-        activeTomSelect.setValue(itemLinks);
-
-        document.getElementById("save-restriction-links-btn").onclick =
-          saveRestrictionLinks;
-        document.getElementById("cancel-restriction-link-btn").onclick =
-          async () => {
-            if (activeTomSelect) {
-              activeTomSelect.destroy();
-              activeTomSelect = null;
-            }
-            await renderItemRestrictionsList();
-          };
-
-        return;
-      }
-
-      if (e.target.id === "create-new-restriction-btn") {
-        renderNewRestrictionFormForModal();
-        return;
-      }
-
-      if (e.target.id === "cancel-new-restriction-btn") {
-        await renderItemRestrictionsList();
-        return;
-      }
-
-      if (e.target.id === "save-new-restriction-btn") {
-        await saveNewRestrictionAndLink();
-        return;
-      }
-
-      if (
-        e.target.closest(".m-category-btn") &&
-        e.target.closest("#item-restrictions-list")
-      ) {
-        const btn = e.target.closest(".m-category-btn");
-        const categoryInput = document.getElementById("new-restr-category");
+    if (e.target.id === "cancel-new-restriction-btn") {
+      renderItemRestrictionsList();
+      return;
+    }
+    if (e.target.id === "save-new-restriction-btn") {
+      saveNewRestrictionAndLink();
+      return;
+    }
+    if (e.target.closest("#item-restrictions-list .m-category-btn")) {
+      const btn = e.target.closest(".m-category-btn");
+      const categoryInput = document.getElementById("new-restr-category");
+      if (btn && categoryInput) {
         const isAlreadyActive = btn.classList.contains("active");
         btn.parentElement
           .querySelectorAll(".active")
           .forEach((b) => b.classList.remove("active"));
-        if (isAlreadyActive) {
-          if (categoryInput) categoryInput.value = "";
-        } else {
+        if (!isAlreadyActive) {
           btn.classList.add("active");
-          if (categoryInput) categoryInput.value = btn.dataset.category;
+          categoryInput.value = btn.dataset.category;
+        } else {
+          categoryInput.value = "";
         }
-        return;
       }
+      return;
+    }
 
-      if (e.target.id === "toggle-plan-edit-btn") {
-        renderExecutionPlan_EditMode();
-        return;
+    // Execution Plan handlers
+    if (e.target.id === "toggle-plan-edit-btn") {
+      renderExecutionPlan_EditMode();
+      return;
+    }
+    if (e.target.id === "cancel-plan-edit-btn") {
+      document.getElementById("execution-plan-content").innerHTML =
+        renderExecutionPlan_ViewMode();
+      return;
+    }
+    if (e.target.id === "save-plan-btn") {
+      const btn = e.target;
+      btn.disabled = true;
+      btn.textContent = "Salvando...";
+      const stepsList = document.getElementById("steps-list");
+      const stepElements = stepsList.querySelectorAll(".execution-step");
+      const steps = Array.from(stepElements)
+        .map((el) => {
+          const inputs = el.querySelectorAll("input");
+          return {
+            name: inputs[0].value.trim(),
+            startDate: inputs[1].value,
+            endDate: inputs[2].value,
+          };
+        })
+        .filter((step) => step.name);
+
+      await storage.saveActivityDetails(currentOpenItemId, steps);
+      activityDetailsMap.set(currentOpenItemId, steps);
+      utils.showToast("Plano salvo!", "success");
+
+      document.getElementById("execution-plan-content").innerHTML =
+        renderExecutionPlan_ViewMode();
+      const toggleBtn = document.getElementById("toggle-plan-edit-btn");
+      toggleBtn.textContent = "Editar Plano";
+
+      await renderCurrentWeekView();
+      return;
+    }
+    if (e.target.id === "add-step-btn") {
+      const list = document.getElementById("steps-list");
+      if (list) {
+        const renderStepRow = (
+          step = { name: "", startDate: "", endDate: "" }
+        ) => `
+          <div class="execution-step">
+            <input type="text" class="form-input flex-grow text-sm" placeholder="Descrição da etapa" value="${
+              step.name || ""
+            }">
+            <input type="date" class="form-input text-sm" value="${
+              step.startDate || ""
+            }">
+            <input type="date" class="form-input text-sm" value="${
+              step.endDate || ""
+            }">
+            <button type="button" class="remove-step-btn" title="Remover Etapa">&times;</button>
+          </div>`;
+        list.insertAdjacentHTML("beforeend", renderStepRow());
       }
+      return;
+    }
+    if (e.target.closest(".remove-step-btn")) {
+      e.target.closest(".execution-step").remove();
+      return;
+    }
+  }
 
-      if (e.target.id === "cancel-plan-edit-btn") {
-        document.getElementById("execution-plan-content").innerHTML =
-          renderExecutionPlan_ViewMode();
-        return;
-      }
+  // --- Restriction Linker Workspace ---
+  async function openRestrictionLinkerWorkspace() {
+    // This function will render the linker UI inside a new modal instance
+    const initialLinkedIds =
+      restrictionLinks
+        .filter((link) => link.itemId === currentOpenItemId)
+        .map((link) => link.restrictionId) || [];
 
-      if (e.target.id === "save-plan-btn") {
-        const btn = e.target;
-        btn.textContent = "Salvando...";
-        btn.disabled = true;
+    const availableRestrictions = restrictionsList.filter(
+      (r) => r.status === "pending"
+    );
 
-        const steps = Array.from(
-          document.querySelectorAll("#steps-list .execution-step")
-        )
-          .map((el) => ({
-            name: el.querySelector('input[type="text"]').value.trim(),
-            startDate: el.querySelector('input[type="date"]:nth-of-type(1)')
-              .value,
-            endDate: el.querySelector('input[type="date"]:nth-of-type(2)')
-              .value,
-          }))
-          .filter((s) => s.name);
+    restrictionLinksInMemory = new Map();
+    availableRestrictions.forEach((restr) => {
+      restrictionLinksInMemory.set(
+        restr.id,
+        initialLinkedIds.includes(restr.id)
+      );
+    });
 
-        try {
-          await storage.saveActivityDetails(currentOpenItemId, steps);
-          activityDetailsMap.set(currentOpenItemId, steps);
-          utils.showToast("Plano salvo!", "success");
-          document.getElementById("execution-plan-content").innerHTML =
-            renderExecutionPlan_ViewMode();
-          const toggleBtn = document.getElementById("toggle-plan-edit-btn");
-          toggleBtn.textContent =
-            steps.length > 0 ? "Editar Plano" : "Criar Plano";
-        } catch (err) {
-          utils.showToast(`Erro ao salvar: ${err.message}`, "error");
-        }
-        return;
-      }
+    const bodyHtml = `
+      <div class="restriction-workspace">
+        <div class="restrictions-list-panel">
+          <h3 class="text-lg font-bold text-primary mb-3">Restrições Pendentes</h3>
+          <input type="text" id="restriction-filter-input" placeholder="Filtrar restrições..." class="form-input mb-3">
+          <div id="restrictions-list-items" class="flex-grow space-y-2 overflow-y-auto pr-2">
+            <!-- Restrictions will be rendered here -->
+          </div>
+        </div>
+        <div class="activities-tree-panel">
+           <h3 class="text-lg font-bold text-primary mb-3">Vinculado a: <span id="active-restriction-name" class="text-accent">Nenhum</span></h3>
+           <p class="text-tertiary">Esta visualização mostra o item atual. A seleção é feita na lista à esquerda.</p>
+           <div class="mt-4 p-4 border border-border-primary rounded-md bg-tertiary">
+            <p class="font-semibold text-primary">${
+              document.querySelector("#page-modal #modal-title")?.textContent ||
+              "Item Atual"
+            }</p>
+            <p class="text-sm text-secondary">${currentOpenItemId}</p>
+           </div>
+        </div>
+      </div>
+    `;
 
-      if (e.target.id === "add-step-btn") {
-        const list = document.getElementById("steps-list");
-        const stepHtml = `<div class="execution-step"><input type="text" class="form-input flex-grow text-sm" placeholder="Descrição da etapa"><input type="date" class="form-input text-sm"><input type="date" class="form-input text-sm"><button type="button" class="remove-step-btn" title="Remover Etapa">&times;</button></div>`;
-        list.insertAdjacentHTML("beforeend", stepHtml);
-        return;
-      }
+    pageModal.open({
+      title: "Vincular Restrições",
+      subtitle: `Vincule restrições pendentes a: ${
+        document.querySelector("#page-modal #modal-title")?.textContent
+      }`,
+      bodyHtml: bodyHtml,
+      customClass: "restriction-linker-modal",
+      saveHandler: saveRestrictionLinksFromLinker,
+      onOpen: () => {
+        renderRestrictionsForLinker(availableRestrictions);
+        const filterInput = document.getElementById("restriction-filter-input");
+        filterInput.addEventListener("input", () =>
+          renderRestrictionsForLinker(availableRestrictions)
+        );
 
-      if (e.target.closest(".remove-step-btn")) {
-        e.target.closest(".execution-step").remove();
-      }
+        document
+          .getElementById("restrictions-list-items")
+          .addEventListener("click", handleRestrictionItemClickInLinker);
+      },
+      onClose: () => {
+        // Re-open the main modal
+        const mainModalTitle =
+          document.querySelector("#page-modal #modal-title")?.textContent || "";
+        openModal(currentOpenItemId, mainModalTitle);
+      },
     });
   }
 
-  function closeModal() {
-    if (activeTomSelect) {
-      activeTomSelect.destroy();
-      activeTomSelect = null;
-    }
-    modal.classList.remove("active");
-    document.body.classList.remove("modal-open");
-    modal.removeEventListener("paste", handlePhotoPaste);
-    if (lastFocusedElement) {
-      lastFocusedElement.focus();
-      lastFocusedElement = null;
-    }
-  }
+  function renderRestrictionsForLinker(restrictions) {
+    const container = document.getElementById("restrictions-list-items");
+    const filterText = document
+      .getElementById("restriction-filter-input")
+      .value.toLowerCase();
 
-  // --- Checklist Runner Functions ---
-  async function openChecklistRunnerModal(wbsId, wbsName, runId) {
-    lastFocusedElement = document.activeElement;
-    document.body.classList.add("modal-open");
+    const filtered = restrictions.filter((r) =>
+      r.desc.toLowerCase().includes(filterText)
+    );
 
-    // Store context in the modal's dataset
-    checklistRunnerModal.dataset.wbsId = wbsId;
-    checklistRunnerModal.dataset.runId = runId || "";
-
-    const run = runId ? checklistRuns.find((r) => r.runId === runId) : null;
-
-    if (checklists.length === 0) {
-      checklistRunnerModalBody.innerHTML = `<div class="message-box info">Nenhum modelo de checklist foi configurado. Vá para a página de Configurações para criar um.</div>`;
-      checklistRunnerSaveBtn.style.display = "none";
-      checklistRunnerModal.classList.add("active");
-      checklistRunnerModalCloseBtn.focus();
-      return;
-    }
-
-    checklistRunnerSaveBtn.style.display = "inline-flex";
-    checklistRunnerModalTitle.textContent = run
-      ? `Ver/Editar Checklist`
-      : `Executar Checklist`;
-    checklistRunnerModalSubtitle.textContent = `Para WBS: ${wbsName}`;
-
-    let bodyHtml;
-    if (run) {
-      // If a run exists, we don't need the template selector. Go straight to the form.
-      bodyHtml = '<div id="checklist-runner-content"></div>';
-    } else {
-      // If it's a new run, show the template selector.
-      bodyHtml = `
-            <div class="space-y-4">
-                <div>
-                    <label for="checklist-template-select" class="form-label font-bold text-primary">Selecione um Checklist</label>
-                    <select id="checklist-template-select" class="form-input">
-                        <option value="">-- Escolha um modelo --</option>
-                        ${checklists
-                          .map(
-                            (c) => `<option value="${c.id}">${c.name}</option>`
-                          )
-                          .join("")}
-                    </select>
-                </div>
-                <div id="checklist-runner-content" class="mt-4"></div>
-            </div>`;
-    }
-
-    checklistRunnerModalBody.innerHTML = bodyHtml;
-
-    if (run) {
-      renderChecklistRunnerForm(run.checklistId, wbsId, run);
-    } else {
-      const select = document.getElementById("checklist-template-select");
-      select.onchange = () =>
-        renderChecklistRunnerForm(select.value, wbsId, null);
-    }
-
-    checklistRunnerModal.classList.add("active");
-  }
-
-  function renderChecklistRunnerForm(checklistId, wbsId, run) {
-    const contentDiv = document.getElementById("checklist-runner-content");
-    if (!checklistId) {
-      contentDiv.innerHTML = "";
-      checklistRunnerSaveBtn.disabled = true;
-      return;
-    }
-
-    const checklist = checklists.find((c) => c.id === checklistId);
-    if (!checklist) {
-      contentDiv.innerHTML = `<p class="text-tertiary">Modelo de checklist não encontrado.</p>`;
-      return;
-    }
-
-    // Store checklistId in the modal for the save function
-    checklistRunnerModal.dataset.checklistId = checklistId;
-
-    const savedAnswers = new Map(Object.entries(run?.answers || {}));
-
-    const questionsHtml = checklist.items
-      .map((item) => {
-        const savedAnswerData = savedAnswers.get(item.id) || {};
-        const answer = savedAnswerData.answer || "C"; // Default to "Conforme"
-
+    container.innerHTML = filtered
+      .map((restr) => {
+        const isChecked = restrictionLinksInMemory.get(restr.id);
         return `
-        <div class="p-3 border-b border-border-primary dark:border-gray-700" data-question-id="${
-          item.id
-        }">
-            <p class="mb-2 text-primary">${
-              item.question
-            } <span class="text-xs text-tertiary font-mono">${
-          item.category || ""
-        }</span></p>
-            <div class="flex gap-4">
-                <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="q_${
-                  item.id
-                }" value="C" ${
-          answer === "C" ? "checked" : ""
-        } class="accent-blue-600"> C</label>
-                <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="q_${
-                  item.id
-                }" value="NC" ${
-          answer === "NC" ? "checked" : ""
-        } class="accent-red-600"> NC</label>
-                <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="q_${
-                  item.id
-                }" value="NA" ${
-          answer === "NA" ? "checked" : ""
-        } class="accent-gray-500"> NA</label>
-            </div>
+        <div class="restriction-link-item flex items-center gap-3 ${
+          isChecked ? "is-active" : ""
+        }" data-id="${restr.id}">
+            <input type="checkbox" class="h-4 w-4 accent-indigo-600 flex-shrink-0" ${
+              isChecked ? "checked" : ""
+            }>
+            <label class="flex-grow cursor-pointer">
+              <p class="font-medium text-primary">${restr.desc}</p>
+              <p class="text-xs text-tertiary">Prazo: ${utils.formatBrazilianDate(
+                restr.due
+              )}</p>
+            </label>
         </div>
       `;
       })
       .join("");
-
-    contentDiv.innerHTML = `
-      <div class="mt-4">
-          <h4 class="font-semibold text-primary mb-2">Perguntas</h4>
-          <div class="border border-border-primary dark:border-gray-600 rounded-md max-h-96 overflow-y-auto">${questionsHtml}</div>
-      </div>`;
-
-    checklistRunnerSaveBtn.disabled = false;
-    checklistRunnerSaveBtn.onclick = saveChecklistRun;
   }
 
-  async function saveChecklistRun() {
-    checklistRunnerSaveBtn.disabled = true;
-    checklistRunnerSaveBtn.textContent = "Salvando...";
+  function handleRestrictionItemClickInLinker(e) {
+    const itemDiv = e.target.closest(".restriction-link-item");
+    if (!itemDiv) return;
 
-    const wbsId = checklistRunnerModal.dataset.wbsId;
-    const runId = checklistRunnerModal.dataset.runId || utils.uuidv4();
-    const checklistId = checklistRunnerModal.dataset.checklistId;
+    const checkbox = itemDiv.querySelector('input[type="checkbox"]');
+    const restrictionId = itemDiv.dataset.id;
 
-    const checklistTemplate = checklists.find((c) => c.id === checklistId);
-    if (!checklistTemplate) {
-      utils.showToast("Erro: Modelo de checklist não encontrado.", "error");
-      checklistRunnerSaveBtn.disabled = false;
-      checklistRunnerSaveBtn.textContent = "Salvar Checklist";
-      return;
+    // Toggle state if the click wasn't on the checkbox itself
+    if (e.target.type !== "checkbox") {
+      checkbox.checked = !checkbox.checked;
     }
 
-    // Use local copies to batch updates
-    let allRuns = [...checklistRuns];
-    let allRestrictions = [...restrictionsList];
+    restrictionLinksInMemory.set(restrictionId, checkbox.checked);
+    itemDiv.classList.toggle("is-active", checkbox.checked);
+    pageModal.enableSaveButton();
+  }
 
-    let run = allRuns.find((r) => r.runId === runId);
-    if (!run) {
-      run = {
-        runId,
-        wbsId,
-        checklistId,
-        createdAt: new Date().toISOString(),
-        answers: {},
-      };
-      allRuns.push(run);
-    }
-    const oldAnswers = new Map(Object.entries(run.answers || {}));
-    run.answers = {};
+  async function saveRestrictionLinksFromLinker(modalInstance) {
+    const otherLinks = restrictionLinks.filter(
+      (l) => l.itemId !== currentOpenItemId
+    );
 
-    const M_CATEGORIES_MAP = {
-      MET: "Método",
-      MAQ: "Máquina",
-      MAO: "Mão de Obra",
-      MAT: "Material",
-      MED: "Medição",
-      MEI: "Meio Ambiente",
-    };
-    const newRestrictionsGenerated = [];
-
-    const questionElements =
-      checklistRunnerModalBody.querySelectorAll("[data-question-id]");
-    for (const qElement of questionElements) {
-      const questionId = qElement.dataset.questionId;
-      const radio = qElement.querySelector(
-        `input[name="q_${questionId}"]:checked`
-      );
-      const newAnswer = radio ? radio.value : "NA";
-      const questionTemplate = checklistTemplate.items.find(
-        (it) => it.id === questionId
-      );
-      const oldAnswerData = oldAnswers.get(questionId);
-
-      let restrictionId = oldAnswerData?.restrictionId || null;
-      let restrictionExists = restrictionId
-        ? allRestrictions.some((r) => r.id === restrictionId)
-        : false;
-
-      if (restrictionId && !restrictionExists) {
-        restrictionId = null;
+    const newLinks = [];
+    for (const [restrId, isLinked] of restrictionLinksInMemory.entries()) {
+      if (isLinked) {
+        newLinks.push({ restrictionId: restrId, itemId: currentOpenItemId });
       }
+    }
 
-      if (newAnswer === "NC") {
-        if (restrictionExists) {
-          const restr = allRestrictions.find((r) => r.id === restrictionId);
-          if (restr && restr.status === "resolved") {
-            restr.status = "pending";
-          }
-        } else {
-          const newRestriction = {
-            id: utils.uuidv4(),
-            desc: questionTemplate.question,
-            category:
-              M_CATEGORIES_MAP[questionTemplate.category] ||
-              questionTemplate.category ||
-              null,
-            status: "pending",
-            resp: "",
-            due: "",
-            createdByChecklistRun: runId,
-            createdByQuestion: questionId,
-          };
-          allRestrictions.push(newRestriction);
-          newRestrictionsGenerated.push(newRestriction); // Collect for the linker
-          restrictionId = newRestriction.id;
-        }
+    restrictionLinks = [...otherLinks, ...newLinks];
+    await storage.saveData(
+      storage.APP_KEYS.RESTRICTION_LINKS_KEY,
+      restrictionLinks
+    );
+
+    // Update local cache
+    const pendingRestrictionsInLink = newLinks.filter((l) => {
+      const restr = restrictionsList.find((r) => r.id === l.restrictionId);
+      return restr && restr.status === "pending";
+    });
+
+    if (pendingRestrictionsInLink.length > 0) {
+      const categories = new Set(
+        pendingRestrictionsInLink
+          .map(
+            (l) =>
+              restrictionsList.find((r) => r.id === l.restrictionId)?.category
+          )
+          .filter(Boolean)
+      );
+      itemRestrictionInfoMap.set(currentOpenItemId, {
+        hasPending: true,
+        pendingCount: pendingRestrictionsInLink.length,
+        pendingCategories: categories,
+      });
+    } else {
+      itemRestrictionInfoMap.delete(currentOpenItemId);
+    }
+
+    // Update the main view badge
+    const restrictionBadge = document.querySelector(
+      `.item-entry[data-item-id="${currentOpenItemId}"] .restriction-badge`
+    );
+    const pendingCount =
+      itemRestrictionInfoMap.get(currentOpenItemId)?.pendingCount || 0;
+
+    if (pendingCount > 0) {
+      if (!restrictionBadge) {
+        document
+          .querySelector(
+            `.item-entry[data-item-id="${currentOpenItemId}"] .flex.justify-between div`
+          )
+          ?.insertAdjacentHTML(
+            "beforeend",
+            `<span class="restriction-badge" title="${pendingCount} restrições pendentes">🚩</span>`
+          );
       } else {
-        // newAnswer is 'C' or 'NA'
-        if (restrictionExists) {
-          const restr = allRestrictions.find((r) => r.id === restrictionId);
-          if (restr) restr.status = "resolved";
-        }
+        restrictionBadge.title = `${pendingCount} restrições pendentes`;
       }
-
-      run.answers[questionId] = {
-        answer: newAnswer,
-        restrictionId: restrictionId,
-      };
-    }
-
-    // Persist run and restriction status changes
-    checklistRuns = allRuns;
-    restrictionsList = allRestrictions;
-    checklistRunsByWbsId.set(wbsId, run);
-
-    // If new restrictions were created, open the linker. Otherwise, just save and refresh.
-    if (newRestrictionsGenerated.length > 0) {
-      // Save the new restrictions first so they have an ID for the linker
-      await Promise.all([
-        storage.saveData(storage.APP_KEYS.CHECKLIST_RUNS_KEY, checklistRuns),
-        storage.saveData(
-          storage.APP_KEYS.RESTRICTIONS_LIST_KEY,
-          restrictionsList
-        ),
-      ]);
-      openRestrictionLinkerWorkspace(newRestrictionsGenerated, wbsId);
     } else {
-      // Just save everything and refresh UI
-      await Promise.all([
-        storage.saveData(storage.APP_KEYS.CHECKLIST_RUNS_KEY, checklistRuns),
-        storage.saveData(
-          storage.APP_KEYS.RESTRICTIONS_LIST_KEY,
-          restrictionsList
-        ),
-      ]);
-      utils.showToast("Checklist salvo!", "success");
-      closeChecklistRunnerModal();
-      await renderCurrentWeekView();
+      restrictionBadge?.remove();
     }
 
-    checklistRunnerSaveBtn.disabled = false;
-    checklistRunnerSaveBtn.textContent = "Salvar Checklist";
+    utils.showToast("Vínculos salvos!", "success");
+    modalInstance.close(); // This will trigger the onClose which re-opens the main modal
   }
 
-  // --- Restriction Linker Workspace Functions ---
+  // Checklist Runner Modal
+  async function openChecklistRunnerModal(wbsId, wbsName, runId) {
+    let checklistRun = checklistRuns.find((r) => r.runId === runId);
 
-  async function openRestrictionLinkerWorkspace(newRestrictions, wbsId) {
-    closeChecklistRunnerModal();
-    lastFocusedElement = document.activeElement;
-    document.body.classList.add("modal-open");
-    restrictionLinkerModal.classList.add("active");
+    if (!checklistRun) {
+      // If no run exists, show a selection of templates
+      const checklistSelectionHtml =
+        checklists.length > 0
+          ? `<label for="checklist-template-select" class="form-label">Selecione um modelo de checklist:</label>
+           <select id="checklist-template-select" class="form-input">
+             <option value="">-- Selecione --</option>
+             ${checklists
+               .map((c) => `<option value="${c.id}">${c.name}</option>`)
+               .join("")}
+           </select>`
+          : `<p class="message-box info">Nenhum modelo de checklist encontrado. Crie um na tela de Configurações.</p>`;
 
-    restrictionLinksInMemory = new Map(
-      newRestrictions.map((r) => [r.id, new Set()])
-    );
+      pageModal.open({
+        title: "Iniciar Checklist",
+        subtitle: `Para: ${wbsName}`,
+        bodyHtml: checklistSelectionHtml,
+        saveHandler: async (modal) => {
+          const select = document.getElementById("checklist-template-select");
+          const templateId = select.value;
+          if (!templateId) {
+            utils.showToast("Selecione um modelo de checklist.", "error");
+            throw new Error("Nenhum modelo selecionado.");
+          }
+          const template = checklists.find((c) => c.id === templateId);
+          const newRun = {
+            runId: utils.uuidv4(),
+            wbsId: wbsId,
+            wbsName: wbsName,
+            templateId: templateId,
+            startedAt: new Date().toISOString(),
+            answers: template.items.map((item) => ({
+              itemId: item.id,
+              question: item.question,
+              category: item.category,
+              answer: "na", // Not Answered
+              comment: "",
+            })),
+          };
+          checklistRuns.push(newRun);
+          checklistRunsByWbsId.set(wbsId, newRun);
+          await storage.saveData(
+            storage.APP_KEYS.CHECKLIST_RUNS_KEY,
+            checklistRuns
+          );
 
-    const leftPanelHtml = `
-      <div class="restrictions-list-panel">
-        <h3 class="text-lg font-bold text-primary mb-3">Restrições Geradas</h3>
-        <div id="restrictions-list-items" class="space-y-2">
-          ${newRestrictions
-            .map(
-              (r) => `
-            <div class="restriction-link-item" data-restriction-id="${
-              r.id
-            }" tabindex="0">
-              <p class="font-semibold text-primary pointer-events-none">${
-                r.desc
-              }</p>
-              <p class="text-sm text-tertiary pointer-events-none">${
-                r.category || "Sem categoria"
-              }</p>
-            </div>
-          `
-            )
-            .join("")}
-        </div>
-      </div>
-    `;
-
-    const rightPanelHtml = `
-      <div class="activities-tree-panel">
-        <h3 class="text-lg font-bold text-primary mb-3">Vincular a: <span id="active-restriction-name" class="text-accent">Nenhuma</span></h3>
-        <div id="activities-tree-container">
-          <p class="text-tertiary text-center p-8">Selecione uma restrição à esquerda para começar.</p>
-        </div>
-      </div>
-    `;
-
-    restrictionLinkerBody.innerHTML = `
-        <div id="restriction-workspace" data-wbs-id="${wbsId}">
-            ${leftPanelHtml}
-            ${rightPanelHtml}
-        </div>`;
-
-    restrictionLinkerBody.addEventListener("click", handleLinkerWorkspaceClick);
-  }
-
-  function handleLinkerWorkspaceClick(e) {
-    const restrictionItem = e.target.closest(".restriction-link-item");
-    if (restrictionItem) {
-      if (activeRestrictionLinkerItem) {
-        activeRestrictionLinkerItem.classList.remove("is-active");
-      }
-      activeRestrictionLinkerItem = restrictionItem;
-      activeRestrictionLinkerItem.classList.add("is-active");
-
-      const restrictionId = restrictionItem.dataset.restrictionId;
-      const restrictionName =
-        restrictionItem.querySelector("p.font-semibold").textContent;
-      document.getElementById("active-restriction-name").textContent =
-        restrictionName;
-
-      const wbsId = document.getElementById("restriction-workspace").dataset
-        .wbsId;
-      const selectedIds =
-        restrictionLinksInMemory.get(restrictionId) || new Set();
-      renderActivitySelectionTree(wbsId, selectedIds);
+          utils.showToast("Checklist iniciado!", "success");
+          modal.close();
+          openChecklistRunnerModal(wbsId, wbsName, newRun.runId);
+        },
+      });
       return;
     }
 
-    const treeContainer = e.target.closest("#activities-tree-container");
-    if (treeContainer) {
-      if (e.target.classList.contains("milestone-tree-toggle")) {
-        const childrenDiv = e.target.parentElement.nextElementSibling;
-        if (childrenDiv) {
-          const isExpanded = e.target.getAttribute("aria-expanded") === "true";
-          childrenDiv.hidden = isExpanded;
-          e.target.setAttribute("aria-expanded", !isExpanded);
-          e.target.textContent = isExpanded ? "+" : "-";
+    // A run exists, render the runner form
+    const renderAnswerRow = (answer) => `
+      <div class="p-3 border-b border-border-primary">
+        <p class="font-medium text-primary mb-2">${
+          answer.question
+        } <span class="text-xs text-tertiary">${
+      answer.category || ""
+    }</span></p>
+        <div class="flex flex-col sm:flex-row gap-4">
+          <div class="flex-grow grid grid-cols-3 gap-2">
+            <button class="answer-btn ${
+              answer.answer === "ok"
+                ? "active bg-green-500 text-white"
+                : "bg-green-100 text-green-800"
+            }" data-item-id="${answer.itemId}" data-answer="ok">OK</button>
+            <button class="answer-btn ${
+              answer.answer === "nok"
+                ? "active bg-red-500 text-white"
+                : "bg-red-100 text-red-800"
+            }" data-item-id="${answer.itemId}" data-answer="nok">Não OK</button>
+            <button class="answer-btn ${
+              answer.answer === "na"
+                ? "active bg-gray-500 text-white"
+                : "bg-gray-200 text-gray-800"
+            }" data-item-id="${answer.itemId}" data-answer="na">N/A</button>
+          </div>
+          <input type="text" class="comment-input form-input text-sm flex-grow-[2]" data-item-id="${
+            answer.itemId
+          }" value="${
+      answer.comment || ""
+    }" placeholder="Comentário (opcional)">
+        </div>
+      </div>
+    `;
+
+    const bodyHtml = `<div class="space-y-2">${checklistRun.answers
+      .map(renderAnswerRow)
+      .join("")}</div>`;
+
+    pageModal.open({
+      title: "Executar Checklist",
+      subtitle: `Para: ${wbsName}`,
+      bodyHtml: bodyHtml,
+      customClass: "modal-large",
+      saveHandler: async () => {
+        await storage.saveData(
+          storage.APP_KEYS.CHECKLIST_RUNS_KEY,
+          checklistRuns
+        );
+        utils.showToast("Checklist salvo!", "success");
+        // Update the button on the main page
+        const checklistButton = document.querySelector(
+          `.run-checklist-btn[data-wbs-id="${wbsId}"]`
+        );
+        if (checklistButton) {
+          checklistButton.textContent = "Ver Checklist";
+          checklistButton.dataset.runId = runId;
         }
-        return;
-      }
-      if (e.target.type === "checkbox") {
-        if (!activeRestrictionLinkerItem) return;
-        const restrictionId = activeRestrictionLinkerItem.dataset.restrictionId;
-        const linksSet = restrictionLinksInMemory.get(restrictionId);
-        if (!linksSet) return;
-
-        const checkbox = e.target;
-        const itemId = checkbox.dataset.itemId;
-
-        if (checkbox.checked) {
-          linksSet.add(itemId);
-        } else {
-          linksSet.delete(itemId);
-        }
-
-        // Cascade changes to children
-        const childrenContainer = checkbox.closest(
-          ".milestone-tree-item-content"
-        ).nextElementSibling;
-        if (childrenContainer) {
-          childrenContainer
-            .querySelectorAll('input[type="checkbox"]')
-            .forEach((childCb) => {
-              if (checkbox.checked) {
-                linksSet.add(childCb.dataset.itemId);
-                childCb.checked = true;
-              } else {
-                linksSet.delete(childCb.dataset.itemId);
-                childCb.checked = false;
-              }
+        pageModal.close();
+      },
+      onOpen: () => {
+        document.getElementById("modal-body").addEventListener("click", (e) => {
+          const btn = e.target.closest(".answer-btn");
+          if (!btn) return;
+          const { itemId, answer } = btn.dataset;
+          const answerData = checklistRun.answers.find(
+            (a) => a.itemId === itemId
+          );
+          if (answerData) {
+            answerData.answer = answer;
+            btn.parentElement.querySelectorAll(".answer-btn").forEach((b) => {
+              b.classList.remove(
+                "active",
+                "bg-green-500",
+                "bg-red-500",
+                "bg-gray-500",
+                "text-white"
+              );
+              b.classList.add(
+                `bg-${
+                  b.dataset.answer === "ok"
+                    ? "green"
+                    : b.dataset.answer === "nok"
+                    ? "red"
+                    : "gray"
+                }-100`,
+                `text-${
+                  b.dataset.answer === "ok"
+                    ? "green"
+                    : b.dataset.answer === "nok"
+                    ? "red"
+                    : "gray"
+                }-800`
+              );
             });
-        }
-        updateParentCheckbox(checkbox);
-      }
-    }
-  }
-
-  function updateParentCheckbox(childCheckbox) {
-    const parentNode = childCheckbox
-      .closest(".milestone-tree-children")
-      ?.closest(".milestone-tree-node");
-    if (!parentNode) return;
-
-    const parentCheckbox = parentNode.querySelector(
-      ':scope > .milestone-tree-item-content > input[type="checkbox"]'
-    );
-    if (!parentCheckbox) return;
-
-    const allChildCheckboxes = Array.from(
-      parentNode.querySelectorAll(
-        '.milestone-tree-children input[type="checkbox"]'
-      )
-    );
-    const checkedCount = allChildCheckboxes.filter((cb) => cb.checked).length;
-
-    if (checkedCount === 0) {
-      parentCheckbox.checked = false;
-      parentCheckbox.indeterminate = false;
-    } else if (checkedCount === allChildCheckboxes.length) {
-      parentCheckbox.checked = true;
-      parentCheckbox.indeterminate = false;
-    } else {
-      parentCheckbox.checked = false;
-      parentCheckbox.indeterminate = true;
-    }
-
-    updateParentCheckbox(parentCheckbox); // Recurse up the tree
-  }
-
-  async function renderActivitySelectionTree(wbsId, selectedItemIdsSet) {
-    const treeContainer = document.getElementById("activities-tree-container");
-    if (!treeContainer) return;
-
-    treeContainer.innerHTML = `<div class="skeleton skeleton-block h-48"></div>`;
-
-    const wbsDescendants = fullTaskList.filter(
-      (task) =>
-        task.wbsPath.some((wbsNode) => wbsNode.stable_wbs_id === wbsId) &&
-        task.status_code !== "TK_Complete"
-    );
-
-    // Build a tree structure from the flat list
-    const itemsByParent = new Map();
-    wbsDescendants.forEach((task) => {
-      task.wbsPath.forEach((wbs, index, arr) => {
-        const parentId = index > 0 ? arr[index - 1].stable_wbs_id : "root";
-        if (!itemsByParent.has(parentId))
-          itemsByParent.set(parentId, { wbs: new Map(), items: [] });
-        if (!itemsByParent.get(parentId).wbs.has(wbs.stable_wbs_id)) {
-          itemsByParent.get(parentId).wbs.set(wbs.stable_wbs_id, wbs);
-        }
-      });
-      const deepestParentId =
-        task.wbsPath.length > 0
-          ? task.wbsPath[task.wbsPath.length - 1].stable_wbs_id
-          : "root";
-      if (!itemsByParent.has(deepestParentId))
-        itemsByParent.set(deepestParentId, { wbs: new Map(), items: [] });
-
-      const groupInfo = activityStageMap.get(task.task_code);
-      const item = groupInfo
-        ? {
-            type: "group",
-            id: `group::${groupInfo.groupId}`,
-            name: `[Grupo] ${groupInfo.groupName}`,
+            btn.classList.add(
+              "active",
+              `bg-${
+                answer === "ok" ? "green" : answer === "nok" ? "red" : "gray"
+              }-500`,
+              "text-white"
+            );
+            pageModal.enableSaveButton();
           }
-        : {
-            type: "task",
-            id: task.task_code,
-            name: `${task.task_code} - ${task.task_name}`,
-          };
-
-      const parentItems = itemsByParent.get(deepestParentId).items;
-      if (!parentItems.some((i) => i.id === item.id)) {
-        parentItems.push(item);
-      }
-    });
-
-    function buildTreeHtml(wbsNodeId) {
-      let html = "";
-      const nodeData = itemsByParent.get(wbsNodeId) || {
-        wbs: new Map(),
-        items: [],
-      };
-
-      const childrenWbs = Array.from(nodeData.wbs.values()).sort((a, b) =>
-        a.wbs_name.localeCompare(b.wbs_name)
-      );
-      const childrenItems = nodeData.items.sort((a, b) =>
-        a.name.localeCompare(b.name)
-      );
-
-      childrenWbs.forEach((wbs) => {
-        const hasChildren = itemsByParent.has(wbs.stable_wbs_id);
-        const isChecked = selectedItemIdsSet.has(wbs.stable_wbs_id);
-        html += `
-              <div class="milestone-tree-node" data-item-id="${
-                wbs.stable_wbs_id
-              }">
-                  <div class="milestone-tree-item-content">
-                      ${
-                        hasChildren
-                          ? '<button type="button" class="milestone-tree-toggle" aria-expanded="false">+</button>'
-                          : '<span class="w-6 inline-block"></span>'
-                      }
-                      <input type="checkbox" id="check-${wbs.stable_wbs_id.replace(
-                        /\W/g,
-                        "_"
-                      )}" data-item-id="${wbs.stable_wbs_id}" ${
-          isChecked ? "checked" : ""
-        }>
-                      <label for="check-${wbs.stable_wbs_id.replace(
-                        /\W/g,
-                        "_"
-                      )}">${wbs.wbs_name}</label>
-                  </div>
-                  ${
-                    hasChildren
-                      ? `<div class="milestone-tree-children pl-4" hidden>${buildTreeHtml(
-                          wbs.stable_wbs_id
-                        )}</div>`
-                      : ""
-                  }
-              </div>`;
-      });
-
-      childrenItems.forEach((item) => {
-        const isItemChecked = selectedItemIdsSet.has(item.id);
-        html += `
-              <div class="milestone-tree-node" data-item-id="${item.id}">
-                   <div class="milestone-tree-item-content">
-                      <span class="w-6 inline-block"></span>
-                      <input type="checkbox" id="check-${item.id.replace(
-                        /\W/g,
-                        "_"
-                      )}" data-item-id="${item.id}" ${
-          isItemChecked ? "checked" : ""
-        }>
-                      <label for="check-${item.id.replace(/\W/g, "_")}">${
-          item.name
-        }</label>
-                  </div>
-              </div>
-          `;
-      });
-
-      return html;
-    }
-
-    // Find the root WBS for the given wbsId to start building the tree
-    const rootWbsForContext = wbsMap.get(wbsId);
-    let initialHtml = "";
-    if (rootWbsForContext) {
-      const isChecked = selectedItemIdsSet.has(rootWbsForContext.stable_wbs_id);
-      initialHtml = `
-          <div class="milestone-tree-node" data-item-id="${
-            rootWbsForContext.stable_wbs_id
-          }">
-              <div class="milestone-tree-item-content">
-                  <button type="button" class="milestone-tree-toggle" aria-expanded="false">+</button>
-                  <input type="checkbox" id="check-${rootWbsForContext.stable_wbs_id.replace(
-                    /\W/g,
-                    "_"
-                  )}" data-item-id="${rootWbsForContext.stable_wbs_id}" ${
-        isChecked ? "checked" : ""
-      }>
-                  <label for="check-${rootWbsForContext.stable_wbs_id.replace(
-                    /\W/g,
-                    "_"
-                  )}">${rootWbsForContext.wbs_name}</label>
-              </div>
-              <div class="milestone-tree-children pl-4" hidden>${buildTreeHtml(
-                rootWbsForContext.stable_wbs_id
-              )}</div>
-          </div>`;
-    }
-
-    treeContainer.innerHTML = initialHtml;
-    // Set initial indeterminate states for all parent checkboxes
-    treeContainer.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
-      const childrenContainer = cb.closest(
-        ".milestone-tree-item-content"
-      ).nextElementSibling;
-      if (childrenContainer) {
-        updateParentCheckbox(
-          childrenContainer.querySelector('input[type="checkbox"]')
-        );
-      }
-    });
-  }
-
-  async function saveRestrictionLinksFromWorkspace() {
-    restrictionLinkerSaveBtn.disabled = true;
-    restrictionLinkerSaveBtn.textContent = "Salvando...";
-
-    try {
-      const newLinks = [];
-      for (const [
-        restrictionId,
-        itemIds,
-      ] of restrictionLinksInMemory.entries()) {
-        itemIds.forEach((itemId) => {
-          newLinks.push({ restrictionId, itemId });
         });
-      }
-
-      restrictionLinks.push(...newLinks);
-      await storage.saveData(
-        storage.APP_KEYS.RESTRICTION_LINKS_KEY,
-        restrictionLinks
-      );
-
-      // Update local cache for UI refresh
-      newLinks.forEach((link) => {
-        const restriction = restrictionsList.find(
-          (r) => r.id === link.restrictionId
-        );
-        if (!restriction || restriction.status !== "pending") return;
-
-        if (!itemRestrictionInfoMap.has(link.itemId)) {
-          itemRestrictionInfoMap.set(link.itemId, {
-            hasPending: false,
-            pendingCount: 0,
-            pendingCategories: new Set(),
-          });
-        }
-        const info = itemRestrictionInfoMap.get(link.itemId);
-        info.hasPending = true;
-        info.pendingCount++;
-        if (restriction.category)
-          info.pendingCategories.add(restriction.category);
-      });
-
-      utils.showToast("Vínculos salvos com sucesso!", "success");
-      closeRestrictionLinkerModal();
-      await renderCurrentWeekView();
-    } catch (error) {
-      utils.showToast(`Erro ao salvar vínculos: ${error.message}`, "error");
-    } finally {
-      restrictionLinkerSaveBtn.disabled = false;
-      restrictionLinkerSaveBtn.textContent = "Salvar Vínculos";
-    }
-  }
-
-  function closeRestrictionLinkerModal() {
-    restrictionLinkerModal.classList.remove("active");
-    document.body.classList.remove("modal-open");
-    restrictionLinkerBody.innerHTML = "";
-    restrictionLinksInMemory.clear();
-    activeRestrictionLinkerItem = null;
-    if (lastFocusedElement) {
-      lastFocusedElement.focus();
-    }
-  }
-
-  function closeChecklistRunnerModal() {
-    checklistRunnerModal.classList.remove("active");
-    document.body.classList.remove("modal-open");
-    // Clear dataset to avoid state bleed
-    delete checklistRunnerModal.dataset.wbsId;
-    delete checklistRunnerModal.dataset.runId;
-    delete checklistRunnerModal.dataset.checklistId;
-
-    if (lastFocusedElement) {
-      lastFocusedElement.focus();
-      lastFocusedElement = null;
-    }
-  }
-
-  function setupFullscreenViewer() {
-    fullscreenCloseBtn.addEventListener("click", closeFullscreen);
-    fullscreenViewer.addEventListener("click", (e) => {
-      if (e.target === fullscreenViewer) closeFullscreen();
+        document.getElementById("modal-body").addEventListener("input", (e) => {
+          const input = e.target.closest(".comment-input");
+          if (!input) return;
+          const { itemId } = input.dataset;
+          const answerData = checklistRun.answers.find(
+            (a) => a.itemId === itemId
+          );
+          if (answerData) {
+            answerData.comment = input.value;
+            pageModal.enableSaveButton();
+          }
+        });
+      },
     });
-    window.addEventListener("keydown", (e) => {
-      if (
-        e.key === "Escape" &&
-        !fullscreenViewer.classList.contains("hidden")
-      ) {
-        closeFullscreen();
-      }
-    });
-  }
-
-  function openFullscreen(src) {
-    fullscreenImage.src = src;
-    fullscreenViewer.classList.remove("hidden");
-    document.body.classList.add("modal-open");
-    fullscreenCloseBtn.focus();
-  }
-
-  function closeFullscreen() {
-    fullscreenViewer.classList.add("hidden");
-    document.body.classList.remove("modal-open");
-    fullscreenImage.src = "";
-    if (lastFocusedElement) lastFocusedElement.focus();
   }
 })();

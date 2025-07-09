@@ -1,8 +1,6 @@
-import {
-  initializationError,
-  showFirebaseError,
-} from "./firebase-config.js";
+import { initializationError, showFirebaseError } from "./firebase-config.js";
 import * as utils from "./utils.js";
+import { renderHTMLTable, renderTableSkeleton } from "./ui-components.js";
 
 // First, check if Firebase is configured. If not, show an error and stop.
 if (initializationError) {
@@ -12,7 +10,7 @@ if (initializationError) {
 }
 
 // If no error, import other modules and run the app
-import { storage } from "./storage.js";
+import { dataLoader } from "./data-loader.js";
 
 // ===== Page Script Starts Here =====
 utils.insertHeader();
@@ -38,93 +36,16 @@ const STATIC_TABLES = [
 ];
 const DYNAMIC_TABLES = ["PROJECT", "TASKPRED", "TASKRSRC"];
 
-const COLUMNS_TO_SAVE_MAP = {
-  PROJECT: [
-    "proj_id",
-    "proj_name",
-    "last_recalc_date",
-    "plan_start_date",
-    "scd_end_date",
-  ],
-  RSRC: ["rsrc_name", "rsrc_type"],
-  TASK: [
-    "status_code",
-    "task_code",
-    "task_name",
-    "target_equip_qty",
-    "act_equip_qty",
-    "remain_equip_qty",
-    "act_start_date",
-    "act_end_date",
-    "reend_date",
-    "restart_date",
-    "target_start_date",
-    "target_end_date",
-    "wbs_stable_id_ref",
-  ],
-  TASKPRED: [
-    "task_id_code",
-    "pred_task_id_code",
-    "pred_type",
-    "lag_hr_cnt",
-  ],
-  TASKRSRC: [
-    "proj_id",
-    "remain_qty",
-    "target_qty",
-    "act_reg_qty",
-    "rsrc_type",
-    "task_id_code",
-    "rsrc_id_name",
-  ],
-  ACTVCODE: ["actv_code_name", "parent_actv_code_name"],
-  TASKACTV: ["task_id_code", "actv_code_id_name"],
-  PROJWBS: ["wbs_id", "wbs_name", "parent_wbs_id"],
-  WBS_HIERARCHY: [
-    "stable_wbs_id",
-    "wbs_name",
-    "level",
-    "parent_stable_wbs_id",
-  ],
-};
-
 const ALL_POSSIBLE_TABLE_NAMES = [
   ...new Set([...STATIC_TABLES, ...DYNAMIC_TABLES]),
 ];
 
-function renderTableSkeleton() {
-  const skeletonRow = `
-        <tr>
-            ${Array(5)
-              .fill('<td><div class="skeleton skeleton-text"></div></td>')
-              .join("")}
-        </tr>
-    `;
-  tableOutput.innerHTML = `
-        <div class="table-container">
-            <table class="w-full">
-                <thead>
-                    <tr>
-                        ${Array(5)
-                          .fill(
-                            '<th><div class="skeleton skeleton-text"></div></th>'
-                          )
-                          .join("")}
-                    </tr>
-                </thead>
-                <tbody>
-                    ${skeletonRow.repeat(5)}
-                </tbody>
-            </table>
-        </div>
-    `;
-}
-
 async function loadAllData() {
-  renderTableSkeleton();
+  tableOutput.innerHTML = renderTableSkeleton(5, 10);
   try {
-    projectBase = await storage.getProjectBase();
-    projectVersions = await storage.getProjectVersions();
+    const data = await dataLoader.loadViewerData();
+    projectBase = data.projectBase;
+    projectVersions = data.projectVersions;
 
     if (!projectBase || Object.keys(projectBase).length === 0) {
       tableOutput.innerHTML = `<p class="message-box info">Nenhum dado base de projeto encontrado. Por favor, envie um arquivo .xer.</p>`;
@@ -148,12 +69,10 @@ async function loadAllData() {
       tableSelect.disabled = false;
       filterInput.disabled = false;
 
-      const defaultTable = ["TASK", "TASKRSRC", "PROJECT"].find(
-        (name) => {
-          const tableData = getTableData(name, latestVersionId);
-          return tableData && tableData.rows.length > 0;
-        }
-      );
+      const defaultTable = ["TASK", "TASKRSRC", "PROJECT"].find((name) => {
+        const tableData = getTableData(name, latestVersionId);
+        return tableData && tableData.rows.length > 0;
+      });
 
       if (defaultTable) {
         tableSelect.value = defaultTable;
@@ -182,16 +101,10 @@ function populateVersionSelect(versions) {
   Object.keys(versions)
     .sort((a, b) => {
       const dateA = new Date(
-        versions[a].PROJECT?.rows[0]?.last_recalc_date.replace(
-          " ",
-          "T"
-        ) || 0
+        versions[a].PROJECT?.rows[0]?.last_recalc_date.replace(" ", "T") || 0
       );
       const dateB = new Date(
-        versions[b].PROJECT?.rows[0]?.last_recalc_date.replace(
-          " ",
-          "T"
-        ) || 0
+        versions[b].PROJECT?.rows[0]?.last_recalc_date.replace(" ", "T") || 0
       );
       return dateB - dateA;
     })
@@ -250,78 +163,47 @@ function renderTable() {
   );
 
   if (!tableData || !tableData.rows || tableData.rows.length === 0) {
-    tableOutput.innerHTML = `<p class="message-box info">A tabela "${currentSelectedTableName}" não contém dados para esta versão.</p>`;
+    tableOutput.innerHTML =
+      '<p class="message-box info">Nenhum dado nesta tabela.</p>';
     return;
   }
 
-  let rowsToProcess = tableData.rows;
-  let headers =
-    COLUMNS_TO_SAVE_MAP[currentSelectedTableName] ||
-    (rowsToProcess.length > 0 ? Object.keys(rowsToProcess[0]) : []);
-
-  const finalFilteredRows = rowsToProcess.filter((rowObject) => {
-    if (!filterValue) return true;
-    return Object.values(rowObject).some((value) =>
-      String(value).toLowerCase().includes(filterValue)
+  let filteredRows = tableData.rows;
+  if (filterValue) {
+    filteredRows = tableData.rows.filter((row) =>
+      Object.values(row).some((value) =>
+        String(value).toLowerCase().includes(filterValue)
+      )
     );
-  });
-
-  if (finalFilteredRows.length === 0) {
-    tableOutput.innerHTML = `<p class="message-box info">${
-      filterValue
-        ? `Nenhum resultado encontrado para "${filterValue}"`
-        : "A tabela não contém dados"
-    }.</p>`;
-    return;
   }
 
-  let tableHtml = `<div class="table-container overflow-x-auto"><table class="min-w-full"><thead><tr>${headers
-    .map(
-      (h) => `<th class="py-2 px-4 whitespace-nowrap">${h}</th>`
-    )
-    .join("")}</tr></thead><tbody>`;
-  tableHtml += finalFilteredRows
-    .map(
-      (row) =>
-        `<tr>${headers
-          .map(
-            (h) =>
-              `<td class="py-2 px-4 whitespace-nowrap">${
-                row[h] || ""
-              }</td>`
-          )
-          .join("")}</tr>`
-    )
-    .join("");
-  tableHtml += `</tbody></table></div>`;
-  tableOutput.innerHTML = tableHtml;
+  tableOutput.innerHTML = renderHTMLTable(tableData.headers, filteredRows);
 }
 
-versionSelect.addEventListener("change", function () {
-  currentSelectedVersionId = this.value;
+versionSelect.addEventListener("change", () => {
+  currentSelectedVersionId = versionSelect.value;
+  populateTableSelect();
+  tableSelect.disabled = !currentSelectedVersionId;
+  filterInput.disabled = !currentSelectedVersionId;
   if (currentSelectedVersionId) {
-    tableSelect.disabled = false;
-    filterInput.disabled = false;
-    populateTableSelect();
-    tableOutput.innerHTML =
-      '<p class="message-box info">Selecione uma tabela para visualizar.</p>';
-    currentTableTitle.classList.add("hidden");
-    filterInput.value = "";
-    tableSelect.value = "";
-    currentSelectedTableName = null;
+    // Select the first available table by default
+    if (tableSelect.options.length > 1) {
+      tableSelect.selectedIndex = 1;
+      currentSelectedTableName = tableSelect.value;
+    } else {
+      currentSelectedTableName = null;
+    }
   } else {
-    tableSelect.disabled = true;
-    filterInput.disabled = true;
-    tableSelect.innerHTML =
-      '<option value="">-- Selecione uma tabela --</option>';
+    currentSelectedTableName = null;
   }
-});
-tableSelect.addEventListener("change", function () {
-  currentSelectedTableName = this.value;
   renderTable();
 });
+
+tableSelect.addEventListener("change", () => {
+  currentSelectedTableName = tableSelect.value;
+  renderTable();
+});
+
 filterInput.addEventListener("input", renderTable);
 
-(async () => {
-  await loadAllData();
-})();
+loadAllData();

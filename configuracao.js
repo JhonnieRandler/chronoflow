@@ -5,6 +5,16 @@ import {
 } from "./firebase-config.js";
 import * as utils from "./utils.js";
 import {
+  Modal,
+  renderWeeksConfigBody,
+  renderResourceConfigBody,
+  renderGroupingConfigBody,
+  renderHiddenActivitiesBody,
+  renderBackupBody,
+  renderCustomValuesBody,
+} from "./ui-components.js";
+import { dataLoader } from "./data-loader.js";
+import {
   ref,
   deleteObject,
 } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-storage.js";
@@ -20,151 +30,16 @@ if (initializationError) {
 import { storage } from "./storage.js";
 
 // ===== Page Script Starts Here =====
+
 (async () => {
   utils.insertHeader();
 
-  let projectBaseData = null;
   let activeTomSelects = [];
   let currentEditingId = null;
   let fileToImport = null;
-  let lastFocusedElement = null; // For accessibility
   let activeMilestoneRow = null; // For the new milestone editor
 
-  const modal = document.getElementById("modal");
-  const modalContent = modal.querySelector(".modal-content");
-  const modalTitle = document.getElementById("modal-title");
-  const modalSubtitle = document.getElementById("modal-subtitle");
-  const modalHeaderActions = document.getElementById("modal-header-actions");
-  const modalBody = document.getElementById("modal-body");
-  const modalMessageArea = document.getElementById("modal-message-area");
-  const modalSaveBtn = document.getElementById("modal-save-btn");
-
-  async function getProjectBase() {
-    if (projectBaseData) return projectBaseData;
-    projectBaseData = await storage.getProjectBase();
-    return projectBaseData;
-  }
-
-  /**
-   * Enables the save button.
-   */
-  function enableSaveButton() {
-    if (modalSaveBtn) {
-      modalSaveBtn.disabled = false;
-    }
-  }
-
-  async function openModal({
-    title,
-    subtitle,
-    bodyHtml,
-    saveHandler,
-    headerAction,
-    needsMoreHeight,
-    customClass = "",
-  }) {
-    lastFocusedElement = document.activeElement; // Save focus
-    modal.setAttribute("aria-hidden", "false");
-    modalContent.setAttribute("role", "dialog");
-    modalContent.setAttribute("aria-modal", "true");
-    modalContent.setAttribute("aria-labelledby", "modal-title");
-
-    // Cleanup old custom classes
-    modal.className = "modal-overlay";
-    if (customClass) {
-      modal.classList.add(customClass);
-    }
-
-    modalTitle.textContent = title;
-    modalSubtitle.textContent = subtitle || "";
-    modalBody.innerHTML =
-      bodyHtml ||
-      '<div class="message-box info" role="status">Carregando...</div>';
-    modalHeaderActions.innerHTML = "";
-    modalHeaderActions.style.display = "none"; // Hide by default
-
-    modal.classList.add("active");
-    document.body.classList.add("modal-open");
-    if (needsMoreHeight) {
-      modal.classList.add("modal-large");
-    }
-
-    document.getElementById("modal-footer").style.display = "flex";
-    modalSaveBtn.style.display = "inline-flex";
-
-    if (headerAction) {
-      modalHeaderActions.style.display = "block";
-      const btn = document.createElement("button");
-      btn.id = headerAction.id;
-      btn.innerHTML = headerAction.icon;
-      btn.title = headerAction.tooltip;
-      btn.setAttribute("aria-label", headerAction.tooltip);
-      btn.className =
-        "bg-blue-600 text-white p-2 rounded-full hover:bg-blue-700 transition-colors";
-      modalHeaderActions.appendChild(btn);
-    }
-
-    activeTomSelects.forEach((ts) => ts.destroy());
-    activeTomSelects = [];
-    modalMessageArea.innerHTML = "";
-
-    if (saveHandler) {
-      modalSaveBtn.onclick = saveHandler;
-      modalSaveBtn.disabled = true;
-    } else {
-      modalSaveBtn.style.display = "none";
-      modalSaveBtn.onclick = null;
-    }
-
-    const focusableElements = modalContent.querySelectorAll(
-      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-    );
-    if (focusableElements.length > 0) {
-      focusableElements[0].focus();
-    }
-  }
-
-  function closeModal() {
-    document.body.classList.remove("modal-open");
-    modal.setAttribute("aria-hidden", "true");
-    modal.classList.remove("active");
-    modal.classList.remove("modal-large");
-    modal.className = "modal-overlay"; // Reset classes
-    fileToImport = null;
-    if (lastFocusedElement) {
-      lastFocusedElement.focus(); // Restore focus
-      lastFocusedElement = null;
-    }
-  }
-
-  function handleFocusTrap(e) {
-    if (e.key !== "Tab" || !modal.classList.contains("active")) return;
-
-    const focusableElements = Array.from(
-      modalContent.querySelectorAll(
-        'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])'
-      )
-    ).filter((el) => el.offsetWidth > 0 || el.offsetHeight > 0);
-
-    if (focusableElements.length === 0) return;
-
-    const firstElement = focusableElements[0];
-    const lastElement = focusableElements[focusableElements.length - 1];
-
-    if (e.shiftKey) {
-      // Shift+Tab
-      if (document.activeElement === firstElement) {
-        lastElement.focus();
-        e.preventDefault();
-      }
-    } else {
-      // Tab
-      if (document.activeElement === lastElement) {
-        firstElement.focus();
-        e.preventDefault();
-      }
-    }
-  }
+  const modal = new Modal("modal");
 
   /**
    * Checks if group data uses old name-based IDs and migrates to stable UUIDs.
@@ -233,162 +108,130 @@ import { storage } from "./storage.js";
   // --- Specific Module Handlers ---
 
   async function handleWeeksConfig() {
-    openModal({
+    modal.open({
       title: "Mapeamento de Semanas",
       subtitle:
         'Carregue um arquivo Excel (.xlsx) com as colunas "Semana" e "Data".',
-      bodyHtml: `
-             <div id="weeks-drop-area" class="drop-area" tabindex="0" role="region" aria-labelledby="modal-title" aria-describedby="modal-subtitle">
-                <p class="text-xl text-tertiary mb-4 hidden md:block">Arraste e solte o arquivo .xlsx aqui</p>
-                <p class="text-quaternary mb-4 hidden md:block">- OU -</p>
-                <label for="weeks-file-input" class="file-input-label">Selecionar Arquivo</label>
-                <input type="file" id="weeks-file-input" accept=".xlsx" class="sr-only"/>
-             </div>
-             <div id="weeks-confirmation-area" class="confirmation-area hidden">
-                <p class="text-secondary mb-4">Arquivo selecionado: <strong id="weeks-confirm-file-name" class="text-primary"></strong></p>
-                <div class="flex justify-center gap-4">
-                  <button id="weeks-cancel-btn" class="px-4 py-2 bg-gray-200 text-primary rounded-md hover:bg-gray-300">Cancelar</button>
-                  <button id="weeks-process-btn" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-semibold">Processar Arquivo</button>
-                </div>
-              </div>
-              <div id="weeks-feedback" class="sr-only" aria-live="polite"></div>
-             `,
-      saveHandler: null,
-    });
-
-    document.getElementById("modal-footer").style.display = "none";
-    let selectedFile = null;
-    const dropArea = document.getElementById("weeks-drop-area");
-    const fileInput = document.getElementById("weeks-file-input");
-    const confirmationArea = document.getElementById("weeks-confirmation-area");
-    const confirmFileName = document.getElementById("weeks-confirm-file-name");
-    const processBtn = document.getElementById("weeks-process-btn");
-    const cancelBtn = document.getElementById("weeks-cancel-btn");
-
-    const showConfirmation = (file) => {
-      selectedFile = file;
-      confirmFileName.textContent = file.name;
-      dropArea.classList.add("hidden");
-      confirmationArea.classList.remove("hidden");
-    };
-
-    const hideConfirmation = () => {
-      selectedFile = null;
-      fileInput.value = ""; // Reset file input
-      dropArea.classList.remove("hidden");
-      confirmationArea.classList.add("hidden");
-    };
-
-    processBtn.onclick = () => processAndSaveWeeksFile(selectedFile);
-    cancelBtn.onclick = hideConfirmation;
-
-    const handleFile = (file, source) => {
-      if (!file || !file.name.toLowerCase().endsWith(".xlsx")) {
-        utils.showToast(
-          "Tipo de arquivo inválido. Use um arquivo .xlsx",
-          "error"
+      bodyHtml: renderWeeksConfigBody(),
+      showFooter: false,
+      onOpen: () => {
+        let selectedFile = null;
+        const dropArea = document.getElementById("weeks-drop-area");
+        const fileInput = document.getElementById("weeks-file-input");
+        const confirmationArea = document.getElementById(
+          "weeks-confirmation-area"
         );
-        return;
-      }
-      if (source === "click") {
-        showConfirmation(file);
-      } else {
-        processAndSaveWeeksFile(file);
-      }
-    };
+        const confirmFileName = document.getElementById(
+          "weeks-confirm-file-name"
+        );
+        const processBtn = document.getElementById("weeks-process-btn");
+        const cancelBtn = document.getElementById("weeks-cancel-btn");
 
-    dropArea.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
-        fileInput.click();
-      }
-    });
-    ["dragenter", "dragover", "dragleave", "drop"].forEach((eventName) =>
-      dropArea.addEventListener(
-        eventName,
-        (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-        },
-        false
-      )
-    );
-    ["dragenter", "dragover"].forEach((eventName) =>
-      dropArea.addEventListener(
-        eventName,
-        () => dropArea.classList.add("highlight"),
-        false
-      )
-    );
-    ["dragleave", "drop"].forEach((eventName) =>
-      dropArea.addEventListener(
-        eventName,
-        () => dropArea.classList.remove("highlight"),
-        false
-      )
-    );
-    dropArea.addEventListener(
-      "drop",
-      (e) => {
-        if (e.dataTransfer.files.length > 0) {
-          handleFile(e.dataTransfer.files[0], "drag");
-        }
+        const showConfirmation = (file) => {
+          selectedFile = file;
+          confirmFileName.textContent = file.name;
+          dropArea.classList.add("hidden");
+          confirmationArea.classList.remove("hidden");
+        };
+
+        const hideConfirmation = () => {
+          selectedFile = null;
+          fileInput.value = ""; // Reset file input
+          dropArea.classList.remove("hidden");
+          confirmationArea.classList.add("hidden");
+        };
+
+        processBtn.onclick = () => processAndSaveWeeksFile(selectedFile);
+        cancelBtn.onclick = hideConfirmation;
+
+        const handleFile = (file, source) => {
+          if (!file || !file.name.toLowerCase().endsWith(".xlsx")) {
+            utils.showToast(
+              "Tipo de arquivo inválido. Use um arquivo .xlsx",
+              "error"
+            );
+            return;
+          }
+          if (source === "click") {
+            showConfirmation(file);
+          } else {
+            processAndSaveWeeksFile(file);
+          }
+        };
+
+        dropArea.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            fileInput.click();
+          }
+        });
+        ["dragenter", "dragover", "dragleave", "drop"].forEach((eventName) =>
+          dropArea.addEventListener(
+            eventName,
+            (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            },
+            false
+          )
+        );
+        ["dragenter", "dragover"].forEach((eventName) =>
+          dropArea.addEventListener(
+            eventName,
+            () => dropArea.classList.add("highlight"),
+            false
+          )
+        );
+        ["dragleave", "drop"].forEach((eventName) =>
+          dropArea.addEventListener(
+            eventName,
+            () => dropArea.classList.remove("highlight"),
+            false
+          )
+        );
+        dropArea.addEventListener(
+          "drop",
+          (e) => {
+            if (e.dataTransfer.files.length > 0) {
+              handleFile(e.dataTransfer.files[0], "drag");
+            }
+          },
+          false
+        );
+        fileInput.addEventListener("change", () => {
+          if (fileInput.files.length > 0) {
+            handleFile(fileInput.files[0], "click");
+          }
+        });
       },
-      false
-    );
-    fileInput.addEventListener("change", () => {
-      if (fileInput.files.length > 0) {
-        handleFile(fileInput.files[0], "click");
-      }
     });
   }
 
   async function handleResourceConfig() {
-    const project = await getProjectBase();
-    const resources = project?.RSRC?.rows || [];
-    let bodyHtml;
-    if (resources.length === 0) {
-      bodyHtml =
-        "<p>Nenhum recurso encontrado. Carregue um arquivo .xer primeiro.</p>";
-    } else {
-      const savedResource = await storage.getData(
-        storage.APP_KEYS.MAIN_RESOURCE_KEY
-      );
-      const options = resources
-        .map(
-          (r) =>
-            `<option value="${r.rsrc_name}" ${
-              savedResource === r.rsrc_name ? "selected" : ""
-            }>${r.rsrc_name}</option>`
-        )
-        .join("");
-      bodyHtml = `<label for="modal-resource-select" class="sr-only">Recurso Principal</label><select id="modal-resource-select" class="form-input">${options}</select>`;
-    }
+    const { projectBase } = await dataLoader.loadCoreDataForConfig();
+    const resources = projectBase?.RSRC?.rows || [];
+    const savedResource = await storage.getData(
+      storage.APP_KEYS.MAIN_RESOURCE_KEY
+    );
 
-    const saveHandler = async () => {
-      modalSaveBtn.disabled = true;
-      modalSaveBtn.textContent = "Salvando...";
-      try {
-        const select = document.getElementById("modal-resource-select");
-        if (select && select.value) {
-          await storage.saveData(
-            storage.APP_KEYS.MAIN_RESOURCE_KEY,
-            select.value
-          );
-          utils.showToast("Recurso salvo!", "success");
-          setTimeout(closeModal, 1500);
-        } else {
-          utils.showToast("Nenhum recurso selecionado.", "error");
-        }
-      } catch (error) {
-        utils.showToast(`Erro ao salvar: ${error.message}`, "error");
-      } finally {
-        modalSaveBtn.disabled = false;
-        modalSaveBtn.textContent = "Salvar";
+    const bodyHtml = renderResourceConfigBody(resources, savedResource);
+
+    const saveHandler = async (modalInstance) => {
+      const select = document.getElementById("modal-resource-select");
+      if (select && select.value) {
+        await storage.saveData(
+          storage.APP_KEYS.MAIN_RESOURCE_KEY,
+          select.value
+        );
+        utils.showToast("Recurso salvo!", "success");
+        setTimeout(() => modalInstance.close(), 1500);
+      } else {
+        utils.showToast("Nenhum recurso selecionado.", "error");
+        throw new Error("Nenhum recurso selecionado."); // Prevent modal from closing on error
       }
     };
 
-    openModal({
+    modal.open({
       title: "Recurso Principal de Avanço",
       subtitle:
         "Selecione o recurso que representa o avanço físico do projeto.",
@@ -398,15 +241,14 @@ import { storage } from "./storage.js";
   }
 
   async function handleGroupingConfig() {
-    const project = await getProjectBase();
-    const wbsHierarchy = project?.WBS_HIERARCHY?.rows || [];
+    const { projectBase } = await dataLoader.loadCoreDataForConfig();
+    const wbsHierarchy = projectBase?.WBS_HIERARCHY?.rows || [];
     let bodyHtml;
 
     if (wbsHierarchy.length === 0) {
       bodyHtml =
         "<p>Nenhuma hierarquia WBS encontrada. Carregue um arquivo .xer primeiro.</p>";
     } else {
-      // Make the calculation super-robust to avoid any chance of NaN.
       const validLevels = wbsHierarchy
         .map((w) => parseInt(w.level, 10))
         .filter((level) => !isNaN(level) && level > 0);
@@ -416,61 +258,37 @@ import { storage } from "./storage.js";
       const savedLevelsData = await storage.getData(
         storage.APP_KEYS.WEEKS_VIEW_GROUPING_KEY
       );
-      // Ensure savedLevels is a clean array of numbers.
       const savedLevels = (
         Array.isArray(savedLevelsData) ? savedLevelsData : []
       )
         .map((l) => parseInt(l, 10))
         .filter((l) => !isNaN(l));
 
-      let checkboxesHtml =
-        '<fieldset><legend class="sr-only">Níveis de agrupamento</legend><div class="grid grid-cols-4 gap-2">';
-      if (maxLevel > 0) {
-        for (let i = 1; i <= maxLevel; i++) {
-          checkboxesHtml += `<div><input type="checkbox" id="level-${i}" value="${i}" ${
-            savedLevels.includes(i) ? "checked" : ""
-          } class="mr-2"><label for="level-${i}">Nível ${i}</label></div>`;
-        }
-      } else {
-        checkboxesHtml +=
-          '<p class="text-secondary col-span-4">Nenhum nível de WBS válido encontrado no projeto.</p>';
-      }
-      checkboxesHtml += "</div></fieldset>";
-      bodyHtml = checkboxesHtml;
+      bodyHtml = renderGroupingConfigBody(maxLevel, savedLevels);
     }
 
-    const saveHandler = async () => {
-      modalSaveBtn.disabled = true;
-      modalSaveBtn.textContent = "Salvando...";
-      try {
-        const selectedLevels = [];
-        document
-          .querySelectorAll('input[type="checkbox"]:checked')
-          .forEach((cb) => {
-            // Double-check to ensure only valid numbers are pushed.
-            if (cb && cb.value) {
-              const level = parseInt(cb.value, 10);
-              if (!isNaN(level)) {
-                selectedLevels.push(level);
-              }
+    const saveHandler = async (modalInstance) => {
+      const selectedLevels = [];
+      document
+        .querySelectorAll('input[type="checkbox"]:checked')
+        .forEach((cb) => {
+          if (cb && cb.value) {
+            const level = parseInt(cb.value, 10);
+            if (!isNaN(level)) {
+              selectedLevels.push(level);
             }
-          });
+          }
+        });
 
-        await storage.saveData(
-          storage.APP_KEYS.WEEKS_VIEW_GROUPING_KEY,
-          selectedLevels.sort((a, b) => a - b)
-        );
-        utils.showToast("Agrupamento salvo com sucesso!", "success");
-        setTimeout(closeModal, 1500);
-      } catch (error) {
-        utils.showToast(`Erro ao salvar: ${error.message}`, "error");
-      } finally {
-        modalSaveBtn.disabled = false;
-        modalSaveBtn.textContent = "Salvar";
-      }
+      await storage.saveData(
+        storage.APP_KEYS.WEEKS_VIEW_GROUPING_KEY,
+        selectedLevels.sort((a, b) => a - b)
+      );
+      utils.showToast("Agrupamento salvo com sucesso!", "success");
+      setTimeout(() => modalInstance.close(), 1500);
     };
 
-    openModal({
+    modal.open({
       title: "Agrupamento da Visão Semanal",
       subtitle:
         'Selecione os níveis da WBS para agrupar as atividades na página "Próximas Semanas".',
@@ -480,369 +298,330 @@ import { storage } from "./storage.js";
   }
 
   async function handleHiddenActivitiesConfig() {
-    const bodyHtml = `<label for="hidden-activities-select" class="sr-only">Atividades a ocultar</label><select id="hidden-activities-select" multiple placeholder="Busque por código ou nome..."></select>`;
-
-    const saveHandler = async () => {
-      modalSaveBtn.disabled = true;
-      modalSaveBtn.textContent = "Salvando...";
-      try {
-        const tomSelect = activeTomSelects[0];
-        if (tomSelect) {
-          await storage.saveData(
-            storage.APP_KEYS.WEEKS_VIEW_HIDDEN_ACTIVITIES_KEY,
-            tomSelect.getValue()
-          );
-          utils.showToast("Lista salva!", "success");
-          setTimeout(closeModal, 1500);
-        }
-      } catch (error) {
-        utils.showToast(`Erro ao salvar: ${error.message}`, "error");
-      } finally {
-        modalSaveBtn.disabled = false;
-        modalSaveBtn.textContent = "Salvar";
+    const saveHandler = async (modalInstance) => {
+      const tomSelect = activeTomSelects[0];
+      if (tomSelect) {
+        await storage.saveData(
+          storage.APP_KEYS.WEEKS_VIEW_HIDDEN_ACTIVITIES_KEY,
+          tomSelect.getValue()
+        );
+        utils.showToast("Lista salva!", "success");
+        setTimeout(() => modalInstance.close(), 1500);
       }
     };
 
-    openModal({
+    modal.open({
       title: "Ocultar Atividades",
       subtitle:
         "Atividades selecionadas não aparecerão no dashboard de próximas semanas.",
-      bodyHtml,
+      bodyHtml: renderHiddenActivitiesBody(),
       saveHandler,
-      needsMoreHeight: true,
+      customClass: "modal-large",
+      onOpen: async () => {
+        const selectEl = document.getElementById("hidden-activities-select");
+        const { projectBase } = await dataLoader.loadCoreDataForConfig();
+        const allTasks = projectBase?.TASK?.rows || [];
+        const options = allTasks
+          .sort((a, b) => a.task_code.localeCompare(b.task_code))
+          .map((t) => ({
+            value: t.task_code,
+            text: `${t.task_code} - ${t.task_name}`,
+          }));
+        if (selectEl) {
+          const tomSelect = new TomSelect(selectEl, {
+            options,
+            plugins: ["remove_button"],
+          });
+          tomSelect.setValue(
+            await storage.getData(
+              storage.APP_KEYS.WEEKS_VIEW_HIDDEN_ACTIVITIES_KEY
+            )
+          );
+          activeTomSelects = [tomSelect];
+        }
+      },
+      onClose: () => {
+        activeTomSelects.forEach((ts) => ts.destroy());
+        activeTomSelects = [];
+      },
     });
-
-    const selectEl = document.getElementById("hidden-activities-select");
-    const project = await getProjectBase();
-    const allTasks = project?.TASK?.rows || [];
-    const options = allTasks
-      .sort((a, b) => a.task_code.localeCompare(b.task_code))
-      .map((t) => ({
-        value: t.task_code,
-        text: `${t.task_code} - ${t.task_name}`,
-      }));
-    if (selectEl) {
-      const tomSelect = new TomSelect(selectEl, {
-        options,
-        plugins: ["remove_button"],
-      });
-      tomSelect.setValue(
-        await storage.getData(storage.APP_KEYS.WEEKS_VIEW_HIDDEN_ACTIVITIES_KEY)
-      );
-      activeTomSelects.push(tomSelect);
-    }
   }
 
   async function handleActivityMappingConfig() {
-    openModal({
+    modal.open({
       title: "Mapeamento de Atividades",
-      needsMoreHeight: true,
+      customClass: "modal-large",
       headerAction: {
         id: "add-new-group-btn",
         icon: `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" /></svg>`,
         tooltip: "Adicionar Novo Grupo",
       },
       saveHandler: saveGroup,
+      onOpen: () => {
+        renderActivityMappingTable();
+        document.getElementById("add-new-group-btn").onclick = () =>
+          renderGroupEditForm();
+      },
     });
-    await renderActivityMappingTable();
   }
 
   async function handleRestrictionsConfig() {
-    openModal({
+    modal.open({
       title: "Gerenciar Restrições",
-      needsMoreHeight: true,
+      customClass: "modal-large",
       headerAction: {
         id: "add-new-restriction-btn",
         icon: `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" /></svg>`,
         tooltip: "Adicionar Nova Restrição",
       },
       saveHandler: saveRestriction,
+      onOpen: () => {
+        renderRestrictionsTable();
+        document.getElementById("add-new-restriction-btn").onclick = () =>
+          renderRestrictionEditForm();
+      },
     });
-    await renderRestrictionsTable();
   }
 
   async function handleCustomValuesConfig() {
-    const bodyHtml = `
-            <div class="space-y-6">
-                <div class="p-4 bg-tertiary rounded-lg border border-border-primary">
-                    <h4 class="font-semibold text-primary mb-2">Importar & Exportar via Excel</h4>
-                    <p class="text-sm text-secondary mb-4">Otimize a atualização de dados em massa. Itens que pertencem a grupos não serão exportados individualmente.</p>
-                    
-                    <div class="space-y-3">
-                        <div>
-                            <label for="custom-values-filter-select" class="form-label">Filtrar itens para exportação (opcional):</label>
-                            <div id="custom-values-filter-skeleton">
-                                <div class="skeleton skeleton-block" style="height: 46px; border-radius: 0.5rem;"></div>
-                            </div>
-                            <div id="custom-values-filter-wrapper" class="hidden">
-                                <select id="custom-values-filter-select" multiple placeholder="Deixe em branco para exportar todos os itens..."></select>
-                            </div>
-                        </div>
-                        <div class="flex gap-2 justify-end pt-2">
-                            <button id="download-template-btn" class="px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm font-semibold flex items-center gap-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                                Baixar Modelo
-                            </button>
-                            <label class="cursor-pointer px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-semibold flex items-center gap-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
-                                Importar Planilha
-                                <input type="file" id="import-spreadsheet-input" class="sr-only" accept=".xlsx, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" />
-                            </label>
-                        </div>
-                    </div>
-                </div>
-                
-                <div id="custom-values-table-wrapper" class="pt-4 border-t border-border-primary">
-                     <!-- Table will be rendered here -->
-                </div>
-            </div>
-        `;
-    openModal({
+    modal.open({
       title: "Valores Personalizados",
-      needsMoreHeight: true,
+      customClass: "modal-large",
       headerAction: {
         id: "add-custom-value-btn",
         icon: `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" /></svg>`,
         tooltip: "Adicionar Novo Valor",
       },
-      bodyHtml,
+      bodyHtml: renderCustomValuesBody(),
       saveHandler: saveCustomValue,
+      onOpen: async () => {
+        renderCustomValuesTable();
+
+        const filterSelectEl = document.getElementById(
+          "custom-values-filter-select"
+        );
+        const skeletonEl = document.getElementById(
+          "custom-values-filter-skeleton"
+        );
+        const wrapperEl = document.getElementById(
+          "custom-values-filter-wrapper"
+        );
+
+        if (filterSelectEl && skeletonEl && wrapperEl) {
+          const allItems = await dataLoader.getSelectableItems();
+          const tomSelect = new TomSelect(filterSelectEl, {
+            options: allItems,
+            plugins: ["remove_button"],
+          });
+          activeTomSelects = [tomSelect];
+          skeletonEl.classList.add("hidden");
+          wrapperEl.classList.remove("hidden");
+        }
+
+        document
+          .getElementById("download-template-btn")
+          ?.addEventListener("click", handleDownloadTemplate);
+        document
+          .getElementById("import-spreadsheet-input")
+          ?.addEventListener("change", handleImportSpreadsheet);
+      },
+      onClose: () => {
+        activeTomSelects.forEach((ts) => ts.destroy());
+        activeTomSelects = [];
+      },
     });
-
-    await renderCustomValuesTable();
-
-    // Populate the filter dropdown (asynchronously)
-    const filterSelectEl = document.getElementById(
-      "custom-values-filter-select"
-    );
-    const skeletonEl = document.getElementById("custom-values-filter-skeleton");
-    const wrapperEl = document.getElementById("custom-values-filter-wrapper");
-
-    if (filterSelectEl && skeletonEl && wrapperEl) {
-      const allItems = await getSelectableItems();
-      const tomSelect = new TomSelect(filterSelectEl, {
-        options: allItems,
-        plugins: ["remove_button"],
-      });
-      activeTomSelects.push(tomSelect);
-      skeletonEl.classList.add("hidden");
-      wrapperEl.classList.remove("hidden");
-    }
-
-    document
-      .getElementById("download-template-btn")
-      ?.addEventListener("click", handleDownloadTemplate);
-    document
-      .getElementById("import-spreadsheet-input")
-      ?.addEventListener("change", handleImportSpreadsheet);
   }
 
   async function handleBackupConfig() {
-    openModal({
+    modal.open({
       title: "Importar & Exportar",
       subtitle:
         "Salve ou restaure um backup de todos os dados e configurações do sistema.",
-      bodyHtml: `
-                <div class="space-y-6">
-                    <div>
-                        <h3 id="export-title" class="font-semibold text-lg text-primary mb-2">Exportar Dados</h3>
-                        <p id="export-subtitle" class="text-secondary mb-4">Clique no botão para baixar um arquivo .json contendo todos os projetos, configurações e valores personalizados.</p>
-                        <button id="export-btn" class="w-full bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 font-semibold">Exportar Todos os Dados</button>
-                    </div>
-                    <div class="border-t pt-6">
-                        <h3 id="import-title" class="font-semibold text-lg text-primary mb-2">Importar Dados</h3>
-                        <p id="import-subtitle" class="text-secondary mb-4">Arraste um arquivo de backup (.json) ou selecione-o para restaurar os dados. <strong class="text-red-600">Atenção: Isso substituirá todos os dados atuais.</strong></p>
-                        <div id="import-drop-area" class="drop-area" tabindex="0" role="region" aria-labelledby="import-title" aria-describedby="import-subtitle">
-                            <p class="text-xl text-tertiary mb-4 hidden md:block">Arraste e solte o arquivo .json aqui</p>
-                            <p class="text-quaternary my-4 hidden md:block">- OU -</p>
-                            <label for="import-file-input" class="file-input-label">Selecionar Arquivo de Backup</label>
-                            <input type="file" id="import-file-input" accept=".json" class="sr-only"/>
-                        </div>
-                         <div id="import-confirmation-area" class="confirmation-area hidden">
-                            <p class="text-secondary mb-4">Arquivo selecionado: <strong id="import-confirm-file-name" class="text-primary"></strong></p>
-                            <div class="flex justify-center gap-4">
-                              <button id="import-cancel-btn" class="px-4 py-2 bg-gray-200 text-primary rounded-md hover:bg-gray-300">Cancelar</button>
-                              <button id="import-process-btn" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-semibold">Confirmar e Importar</button>
-                            </div>
-                        </div>
-                        <div id="import-feedback" class="sr-only" aria-live="polite"></div>
-                    </div>
-                </div>`,
-      saveHandler: null,
-    });
-    document.getElementById("modal-footer").style.display = "none";
-    document.getElementById("export-btn").onclick = async () => {
-      const backupData = await storage.exportAllData();
-      const blob = new Blob([JSON.stringify(backupData, null, 2)], {
-        type: "application/json",
-      });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `chronoflow_backup_${
-        new Date().toISOString().split("T")[0]
-      }.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      utils.showToast("Exportação iniciada.", "success");
-    };
+      bodyHtml: renderBackupBody(),
+      showFooter: false,
+      onOpen: () => {
+        document.getElementById("export-btn").onclick = async () => {
+          const backupData = await storage.exportAllData();
+          const blob = new Blob([JSON.stringify(backupData, null, 2)], {
+            type: "application/json",
+          });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `chronoflow_backup_${
+            new Date().toISOString().split("T")[0]
+          }.json`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          utils.showToast("Exportação iniciada.", "success");
+        };
 
-    const importInput = document.getElementById("import-file-input");
-    const importDropArea = document.getElementById("import-drop-area");
-    const confirmationArea = document.getElementById(
-      "import-confirmation-area"
-    );
-    const confirmFileName = document.getElementById("import-confirm-file-name");
-    const processBtn = document.getElementById("import-process-btn");
-    const cancelBtn = document.getElementById("import-cancel-btn");
-
-    const processImportFile = (file) => {
-      if (!file) return;
-
-      confirmationArea.classList.add("hidden");
-      modalBody.innerHTML +=
-        '<div class="message-box info mt-4">Importando arquivo...</div>';
-
-      const reader = new FileReader();
-      reader.onload = async function (e) {
-        const feedbackEl = document.getElementById("import-feedback");
-        try {
-          if (feedbackEl)
-            feedbackEl.textContent = `Processando arquivo ${file.name}...`;
-          const data = JSON.parse(e.target.result);
-          const importedKeys = await storage.importAllData(data);
-          if (importedKeys > 0) {
-            if (feedbackEl)
-              feedbackEl.textContent =
-                "Dados importados com sucesso! A página será recarregada.";
-            utils.showToast(
-              "Dados importados com sucesso! A página será recarregada.",
-              "success"
-            );
-            setTimeout(() => window.location.reload(), 2000);
-          } else {
-            throw new Error("O arquivo não parece ser um backup válido.");
-          }
-        } catch (err) {
-          if (feedbackEl)
-            feedbackEl.textContent = `Erro ao importar: ${err.message}`;
-          utils.showToast(`Erro ao importar: ${err.message}`, "error");
-          importDropArea.classList.remove("hidden"); // Show drop area again on error
-        }
-      };
-      reader.readAsText(file);
-    };
-
-    const showConfirmation = (file) => {
-      fileToImport = file;
-      confirmFileName.textContent = file.name;
-      importDropArea.classList.add("hidden");
-      confirmationArea.classList.remove("hidden");
-    };
-
-    const hideConfirmation = () => {
-      fileToImport = null;
-      importInput.value = "";
-      importDropArea.classList.remove("hidden");
-      confirmationArea.classList.add("hidden");
-    };
-
-    processBtn.onclick = () => {
-      if (
-        fileToImport &&
-        confirm(
-          "Tem certeza que deseja importar este arquivo? Todos os dados atuais (projetos, configurações, etc.) serão substituídos. Esta ação não pode ser desfeita."
-        )
-      ) {
-        processImportFile(fileToImport);
-      }
-    };
-    cancelBtn.onclick = hideConfirmation;
-
-    const handleFileSelection = (selectedFile, source) => {
-      if (selectedFile && selectedFile.name.toLowerCase().endsWith(".json")) {
-        if (source === "click") {
-          showConfirmation(selectedFile);
-        } else {
-          processImportFile(selectedFile);
-        }
-      } else if (selectedFile) {
-        utils.showToast(
-          "Tipo de arquivo inválido. Apenas arquivos .json são permitidos.",
-          "error"
+        const importInput = document.getElementById("import-file-input");
+        const importDropArea = document.getElementById("import-drop-area");
+        const confirmationArea = document.getElementById(
+          "import-confirmation-area"
         );
-      }
-    };
+        const confirmFileName = document.getElementById(
+          "import-confirm-file-name"
+        );
+        const processBtn = document.getElementById("import-process-btn");
+        const cancelBtn = document.getElementById("import-cancel-btn");
 
-    importDropArea.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
-        importInput.click();
-      }
-    });
-    importInput.onchange = () =>
-      handleFileSelection(
-        importInput.files.length > 0 ? importInput.files[0] : null,
-        "click"
-      );
+        const processImportFile = (file) => {
+          if (!file) return;
 
-    ["dragenter", "dragover", "dragleave", "drop"].forEach((eventName) => {
-      importDropArea.addEventListener(
-        eventName,
-        (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-        },
-        false
-      );
-    });
-    ["dragenter", "dragover"].forEach((eventName) =>
-      importDropArea.addEventListener(
-        eventName,
-        () => importDropArea.classList.add("highlight"),
-        false
-      )
-    );
-    ["dragleave", "drop"].forEach((eventName) =>
-      importDropArea.addEventListener(
-        eventName,
-        () => importDropArea.classList.remove("highlight"),
-        false
-      )
-    );
-    importDropArea.addEventListener(
-      "drop",
-      (e) => {
-        if (e.dataTransfer.files.length > 0) {
-          handleFileSelection(e.dataTransfer.files[0], "drag");
-        }
+          confirmationArea.classList.add("hidden");
+          const modalBody = document.getElementById("modal-body");
+          modalBody.innerHTML +=
+            '<div class="message-box info mt-4">Importando arquivo...</div>';
+
+          const reader = new FileReader();
+          reader.onload = async function (e) {
+            const feedbackEl = document.getElementById("import-feedback");
+            try {
+              if (feedbackEl)
+                feedbackEl.textContent = `Processando arquivo ${file.name}...`;
+              const data = JSON.parse(e.target.result);
+              const importedKeys = await storage.importAllData(data);
+              if (importedKeys > 0) {
+                if (feedbackEl)
+                  feedbackEl.textContent =
+                    "Dados importados com sucesso! A página será recarregada.";
+                utils.showToast(
+                  "Dados importados com sucesso! A página será recarregada.",
+                  "success"
+                );
+                setTimeout(() => window.location.reload(), 2000);
+              } else {
+                throw new Error("O arquivo não parece ser um backup válido.");
+              }
+            } catch (err) {
+              if (feedbackEl)
+                feedbackEl.textContent = `Erro ao importar: ${err.message}`;
+              utils.showToast(`Erro ao importar: ${err.message}`, "error");
+              importDropArea.classList.remove("hidden"); // Show drop area again on error
+            }
+          };
+          reader.readAsText(file);
+        };
+
+        const showConfirmation = (file) => {
+          fileToImport = file;
+          confirmFileName.textContent = file.name;
+          importDropArea.classList.add("hidden");
+          confirmationArea.classList.remove("hidden");
+        };
+
+        const hideConfirmation = () => {
+          fileToImport = null;
+          importInput.value = "";
+          importDropArea.classList.remove("hidden");
+          confirmationArea.classList.add("hidden");
+        };
+
+        processBtn.onclick = () => {
+          if (
+            fileToImport &&
+            confirm(
+              "Tem certeza que deseja importar este arquivo? Todos os dados atuais (projetos, configurações, etc.) serão substituídos. Esta ação não pode ser desfeita."
+            )
+          ) {
+            processImportFile(fileToImport);
+          }
+        };
+        cancelBtn.onclick = hideConfirmation;
+
+        const handleFileSelection = (selectedFile, source) => {
+          if (
+            selectedFile &&
+            selectedFile.name.toLowerCase().endsWith(".json")
+          ) {
+            if (source === "click") {
+              showConfirmation(selectedFile);
+            } else {
+              processImportFile(selectedFile);
+            }
+          } else if (selectedFile) {
+            utils.showToast(
+              "Tipo de arquivo inválido. Apenas arquivos .json são permitidos.",
+              "error"
+            );
+          }
+        };
+
+        importDropArea.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            importInput.click();
+          }
+        });
+        importInput.onchange = () =>
+          handleFileSelection(
+            importInput.files.length > 0 ? importInput.files[0] : null,
+            "click"
+          );
+
+        ["dragenter", "dragover", "dragleave", "drop"].forEach((eventName) => {
+          importDropArea.addEventListener(
+            eventName,
+            (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            },
+            false
+          );
+        });
+        ["dragenter", "dragover"].forEach((eventName) =>
+          importDropArea.addEventListener(
+            eventName,
+            () => importDropArea.classList.add("highlight"),
+            false
+          )
+        );
+        ["dragleave", "drop"].forEach((eventName) =>
+          importDropArea.addEventListener(
+            eventName,
+            () => importDropArea.classList.remove("highlight"),
+            false
+          )
+        );
+        importDropArea.addEventListener(
+          "drop",
+          (e) => {
+            if (e.dataTransfer.files.length > 0) {
+              handleFileSelection(e.dataTransfer.files[0], "drag");
+            }
+          },
+          false
+        );
       },
-      false
-    );
+      onClose: () => {
+        fileToImport = null;
+      },
+    });
   }
 
   async function handleActivityDetailsConfig() {
-    openModal({
+    modal.open({
       title: "Gerenciar Detalhamento",
       subtitle: "Adicione, edite ou remova planos de execução detalhados.",
-      needsMoreHeight: true,
+      customClass: "modal-large",
+      showFooter: false,
       headerAction: {
         id: "add-new-plan-btn",
         icon: `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" /></svg>`,
         tooltip: "Adicionar Novo Plano",
       },
+      onOpen: () => {
+        renderActivityDetailsTable();
+        const addBtn = document.getElementById("add-new-plan-btn");
+        if (addBtn) {
+          addBtn.onclick = () => renderPlanEditForm();
+        }
+      },
     });
-    modalSaveBtn.style.display = "none";
-    document.getElementById("modal-cancel-btn").textContent = "Fechar";
-
-    await renderActivityDetailsTable();
-
-    const addBtn = document.getElementById("add-new-plan-btn");
-    if (addBtn) {
-      addBtn.onclick = () => renderPlanEditForm();
-    }
   }
 
   // --- Table and Form Rendering Functions ---
@@ -851,9 +630,10 @@ import { storage } from "./storage.js";
     let savedMapping = await storage.getData(
       storage.APP_KEYS.ACTIVITY_MAPPING_KEY
     );
-    modalSaveBtn.style.display = "none";
-    modalSubtitle.textContent =
-      "Gerencie grupos de atividades que representam o mesmo trabalho.";
+    modal.setSaveHandler(saveGroup);
+    modal.setSubtitle(
+      "Gerencie grupos de atividades que representam o mesmo trabalho."
+    );
     if (document.getElementById("add-new-group-btn")) {
       document.getElementById("add-new-group-btn").onclick = () =>
         renderGroupEditForm();
@@ -869,35 +649,8 @@ import { storage } from "./storage.js";
       tableHtml += `<tr><td colspan="3" class="text-center text-tertiary py-6">Nenhum grupo de atividades criado.</td></tr>`;
     }
     tableHtml += `</tbody></table></div>`;
-    modalBody.innerHTML = tableHtml;
-  }
-
-  /**
-   * Helper to get items for select dropdowns, excluding tasks that are in groups.
-   */
-  async function getSelectableItems() {
-    const [project, mapping] = await Promise.all([
-      getProjectBase(),
-      storage.getData(storage.APP_KEYS.ACTIVITY_MAPPING_KEY),
-    ]);
-
-    const groupedTaskCodes = new Set(mapping.flatMap((g) => g.taskCodes));
-
-    const ungroupedTaskOptions = (project?.TASK?.rows || [])
-      .filter((t) => !groupedTaskCodes.has(t.task_code))
-      .map((t) => ({
-        value: t.task_code,
-        text: `${t.task_code} - ${t.task_name}`,
-      }));
-
-    const groupOptions = mapping.map((g) => ({
-      value: `group::${g.groupId}`,
-      text: `[Grupo] ${g.groupName}`,
-    }));
-
-    return [...ungroupedTaskOptions, ...groupOptions].sort((a, b) =>
-      a.text.localeCompare(b.text)
-    );
+    modal.setBody(tableHtml);
+    modal.showSaveButton(false);
   }
 
   async function renderGroupEditForm(groupId = null) {
@@ -909,19 +662,25 @@ import { storage } from "./storage.js";
       : { groupName: "", taskCodes: [], groupId: null };
     currentEditingId = groupId;
 
-    modalSubtitle.textContent = groupId
-      ? `Editando o grupo "${group.groupName}"`
-      : "Criando um novo grupo de atividades.";
-    modalSaveBtn.style.display = "inline-flex";
-    modalHeaderActions.innerHTML = "";
-    modalBody.innerHTML = `<div class="space-y-4"><div><label for="group-name-input" class="font-bold text-primary">Nome do Grupo:</label><input type="text" id="group-name-input" value="${group.groupName}" class="form-input mt-1" placeholder="Ex: Escavação Total C2+C3"></div><div><label for="activity-group-select" class="font-semibold text-primary mt-2 block">Atividades do Grupo:</label><select id="activity-group-select" multiple></select></div></div>`;
+    modal.setSubtitle(
+      groupId
+        ? `Editando o grupo "${group.groupName}"`
+        : "Criando um novo grupo de atividades."
+    );
+    modal.showSaveButton(true);
+    modal.hideHeaderAction();
+    modal.setBody(
+      `<div class="space-y-4"><div><label for="group-name-input" class="font-bold text-primary">Nome do Grupo:</label><input type="text" id="group-name-input" value="${group.groupName}" class="form-input mt-1" placeholder="Ex: Escavação Total C2+C3"></div><div><label for="activity-group-select" class="font-semibold text-primary mt-2 block">Atividades do Grupo:</label><select id="activity-group-select" multiple></select></div></div>`
+    );
+
+    const { projectBase } = await dataLoader.loadCoreDataForConfig();
     const usedTaskCodes = new Set();
     savedMapping.forEach((g) => {
       if (g.groupId !== groupId) {
         g.taskCodes.forEach((code) => usedTaskCodes.add(code));
       }
     });
-    const allTasks = (await getProjectBase())?.TASK?.rows || [];
+    const allTasks = projectBase?.TASK?.rows || [];
     const availableTasks = allTasks.filter(
       (task) => !usedTaskCodes.has(task.task_code)
     );
@@ -938,29 +697,27 @@ import { storage } from "./storage.js";
       placeholder: "Selecione 2 ou mais atividades...",
     });
     tomSelect.setValue(group.taskCodes);
-    activeTomSelects.push(tomSelect);
+    activeTomSelects = [tomSelect];
   }
 
   async function renderCustomValuesTable() {
     let savedValues = await storage.getData(storage.APP_KEYS.CUSTOM_VALUES_KEY);
-    modalSaveBtn.style.display = "none";
-    modalSubtitle.textContent =
-      "Gerencie valores que sobrepõem os dados do cronograma.";
+    modal.setSaveHandler(null);
+    modal.showSaveButton(false);
+    modal.setSubtitle("Gerencie valores que sobrepõem os dados do cronograma.");
     document
       .getElementById("add-custom-value-btn")
       ?.addEventListener("click", () => renderCustomValueEditForm());
 
-    const project = await getProjectBase();
-    const mapping = await storage.getData(
-      storage.APP_KEYS.ACTIVITY_MAPPING_KEY
-    );
+    const { projectBase, activityMapping } =
+      await dataLoader.loadCoreDataForConfig();
 
     const allItems = [
-      ...(project?.TASK?.rows || []).map((t) => ({
+      ...(projectBase?.TASK?.rows || []).map((t) => ({
         id: t.task_code,
         name: `${t.task_code} - ${t.task_name}`,
       })),
-      ...mapping.map((g) => ({
+      ...activityMapping.map((g) => ({
         id: `group::${g.groupId}`,
         name: `[Grupo] ${g.groupName}`,
       })),
@@ -996,7 +753,7 @@ import { storage } from "./storage.js";
     if (container) {
       container.innerHTML = tableHtml;
     } else {
-      modalBody.innerHTML = tableHtml; // Fallback
+      modal.setBody(tableHtml); // Fallback
     }
   }
 
@@ -1008,18 +765,22 @@ import { storage } from "./storage.js";
       ? savedValues.find((v) => v.id === id)
       : { id: null, planned: "", actual: "" };
     currentEditingId = id;
-    modalSaveBtn.style.display = "inline-flex";
-    modalHeaderActions.innerHTML = "";
-    modalSubtitle.textContent = id
-      ? `Editando valor para "${value.name || id}"`
-      : "Criando um novo valor personalizado.";
-    modalBody.innerHTML = `<div class="space-y-4"><div><label for="custom-value-select" class="font-bold text-primary">Atividade ou Grupo</label><select id="custom-value-select" class="mt-1"></select></div><div class="grid grid-cols-2 gap-4"><div><label for="custom-planned-input" class="font-bold text-primary">Previsto Personalizado</label><input type="number" step="any" id="custom-planned-input" class="form-input mt-1" value="${
-      value.planned ?? ""
-    }" placeholder="Ex: 1500.50"></div><div><label for="custom-actual-input" class="font-bold text-primary">Realizado Personalizado</label><input type="number" step="any" id="custom-actual-input" class="form-input mt-1" value="${
-      value.actual ?? ""
-    }" placeholder="Ex: 750.25"></div></div></div>`;
+    modal.showSaveButton(true);
+    modal.hideHeaderAction();
+    modal.setSubtitle(
+      id
+        ? `Editando valor para "${value.name || id}"`
+        : "Criando um novo valor personalizado."
+    );
+    modal.setBody(
+      `<div class="space-y-4"><div><label for="custom-value-select" class="font-bold text-primary">Atividade ou Grupo</label><select id="custom-value-select" class="mt-1"></select></div><div class="grid grid-cols-2 gap-4"><div><label for="custom-planned-input" class="font-bold text-primary">Previsto Personalizado</label><input type="number" step="any" id="custom-planned-input" class="form-input mt-1" value="${
+        value.planned ?? ""
+      }" placeholder="Ex: 1500.50"></div><div><label for="custom-actual-input" class="font-bold text-primary">Realizado Personalizado</label><input type="number" step="any" id="custom-actual-input" class="form-input mt-1" value="${
+        value.actual ?? ""
+      }" placeholder="Ex: 750.25"></div></div></div>`
+    );
 
-    const allOptions = await getSelectableItems();
+    const allOptions = await dataLoader.getSelectableItems();
 
     const usedValueIds = new Set(savedValues.map((v) => v.id));
     if (id) {
@@ -1038,19 +799,17 @@ import { storage } from "./storage.js";
     if (id) {
       tomSelect.disable();
     }
-    activeTomSelects.push(tomSelect);
+    activeTomSelects = [tomSelect];
   }
 
   async function renderActivityDetailsTable() {
-    const [activityDetails, project, mapping] = await Promise.all([
-      storage.getActivityDetails(),
-      getProjectBase(),
-      storage.getData(storage.APP_KEYS.ACTIVITY_MAPPING_KEY),
-    ]);
+    const [activityDetails, { projectBase, activityMapping }] =
+      await Promise.all([
+        storage.getActivityDetails(),
+        dataLoader.loadCoreDataForConfig(),
+      ]);
 
-    // Set up the modal buttons and behavior for the list view
-    modalSaveBtn.style.display = "none";
-    document.getElementById("modal-cancel-btn").onclick = closeModal;
+    modal.showSaveButton(false);
     document.getElementById("modal-cancel-btn").textContent = "Fechar";
 
     const addBtn = document.getElementById("add-new-plan-btn");
@@ -1059,16 +818,17 @@ import { storage } from "./storage.js";
     }
 
     if (activityDetails.length === 0) {
-      modalBody.innerHTML =
-        '<div class="message-box info">Nenhum plano de execução detalhado foi criado. Clique no botão + para adicionar um.</div>';
+      modal.setBody(
+        '<div class="message-box info">Nenhum plano de execução detalhado foi criado. Clique no botão + para adicionar um.</div>'
+      );
       return;
     }
 
     const allItemsMap = new Map();
-    (project?.TASK?.rows || []).forEach((t) =>
+    (projectBase?.TASK?.rows || []).forEach((t) =>
       allItemsMap.set(t.task_code, `${t.task_code} - ${t.task_name}`)
     );
-    mapping.forEach((g) =>
+    activityMapping.forEach((g) =>
       allItemsMap.set(`group::${g.groupId}`, `[Grupo] ${g.groupName}`)
     );
 
@@ -1106,7 +866,7 @@ import { storage } from "./storage.js";
     });
 
     tableHtml += `</tbody></table></div>`;
-    modalBody.innerHTML = tableHtml;
+    modal.setBody(tableHtml);
   }
 
   /**
@@ -1226,64 +986,52 @@ import { storage } from "./storage.js";
     ]);
   }
 
-  async function saveGroup() {
-    modalSaveBtn.disabled = true;
-    modalSaveBtn.textContent = "Salvando...";
-    try {
-      const groupName = document.getElementById("group-name-input").value;
-      const tomSelect = activeTomSelects[0];
-      const taskCodes = tomSelect ? tomSelect.getValue() : [];
-      if (!groupName.trim()) {
-        utils.showToast("O nome do grupo não pode ser vazio.", "error");
-        return;
-      }
-      if (taskCodes.length < 2) {
-        utils.showToast("Um grupo deve ter pelo menos 2 atividades.", "error");
-        return;
-      }
-      let savedMapping = await storage.getData(
-        storage.APP_KEYS.ACTIVITY_MAPPING_KEY
-      );
-
-      let groupToSave;
-      if (currentEditingId !== null) {
-        // Editing existing group
-        const index = savedMapping.findIndex(
-          (g) => g.groupId === currentEditingId
-        );
-        if (index > -1) {
-          savedMapping[index].groupName = groupName;
-          savedMapping[index].taskCodes = taskCodes;
-          groupToSave = savedMapping[index];
-        }
-      } else {
-        // Creating new group
-        const newGroup = {
-          groupName,
-          taskCodes,
-          groupId: utils.uuidv4(),
-        };
-        savedMapping.push(newGroup);
-        groupToSave = newGroup;
-      }
-      await storage.saveData(
-        storage.APP_KEYS.ACTIVITY_MAPPING_KEY,
-        savedMapping
-      );
-
-      // Consolidate data for the new/updated group
-      if (groupToSave) {
-        await consolidateGroupData(groupToSave);
-      }
-
-      utils.showToast("Grupo salvo e dados consolidados!", "success");
-      setTimeout(closeModal, 1500);
-    } catch (error) {
-      utils.showToast(`Erro ao salvar grupo: ${error.message}`, "error");
-    } finally {
-      modalSaveBtn.disabled = false;
-      modalSaveBtn.textContent = "Salvar";
+  async function saveGroup(modalInstance) {
+    const groupName = document.getElementById("group-name-input").value;
+    const tomSelect = activeTomSelects[0];
+    const taskCodes = tomSelect ? tomSelect.getValue() : [];
+    if (!groupName.trim()) {
+      utils.showToast("O nome do grupo não pode ser vazio.", "error");
+      throw new Error("Nome do grupo vazio.");
     }
+    if (taskCodes.length < 2) {
+      utils.showToast("Um grupo deve ter pelo menos 2 atividades.", "error");
+      throw new Error("Grupo precisa de pelo menos 2 atividades.");
+    }
+    let savedMapping = await storage.getData(
+      storage.APP_KEYS.ACTIVITY_MAPPING_KEY
+    );
+
+    let groupToSave;
+    if (currentEditingId !== null) {
+      // Editing existing group
+      const index = savedMapping.findIndex(
+        (g) => g.groupId === currentEditingId
+      );
+      if (index > -1) {
+        savedMapping[index].groupName = groupName;
+        savedMapping[index].taskCodes = taskCodes;
+        groupToSave = savedMapping[index];
+      }
+    } else {
+      // Creating new group
+      const newGroup = {
+        groupName,
+        taskCodes,
+        groupId: utils.uuidv4(),
+      };
+      savedMapping.push(newGroup);
+      groupToSave = newGroup;
+    }
+    await storage.saveData(storage.APP_KEYS.ACTIVITY_MAPPING_KEY, savedMapping);
+
+    // Consolidate data for the new/updated group
+    if (groupToSave) {
+      await consolidateGroupData(groupToSave);
+    }
+
+    utils.showToast("Grupo salvo e dados consolidados!", "success");
+    setTimeout(() => modalInstance.close(), 1500);
   }
 
   async function deleteGroup(groupId) {
@@ -1349,54 +1097,41 @@ import { storage } from "./storage.js";
     }
   }
 
-  async function saveCustomValue() {
-    modalSaveBtn.disabled = true;
-    modalSaveBtn.textContent = "Salvando...";
-    try {
-      const tomSelect = document.getElementById(
-        "custom-value-select"
-      ).tomselect;
-      const selectedId = tomSelect ? tomSelect.getValue() : null;
-      const plannedVal = document.getElementById("custom-planned-input").value;
-      const actualVal = document.getElementById("custom-actual-input").value;
+  async function saveCustomValue(modalInstance) {
+    const tomSelect = document.getElementById("custom-value-select").tomselect;
+    const selectedId = tomSelect ? tomSelect.getValue() : null;
+    const plannedVal = document.getElementById("custom-planned-input").value;
+    const actualVal = document.getElementById("custom-actual-input").value;
 
-      if (!selectedId) {
-        utils.showToast("Selecione uma atividade ou grupo.", "error");
-        return;
-      }
-      if (plannedVal.trim() === "" && actualVal.trim() === "") {
-        utils.showToast(
-          "Preencha pelo menos um dos valores (previsto ou realizado).",
-          "error"
-        );
-        return;
-      }
-
-      let savedValues = await storage.getData(
-        storage.APP_KEYS.CUSTOM_VALUES_KEY
-      );
-      const newValue = {
-        id: selectedId,
-        planned: plannedVal.trim() !== "" ? parseFloat(plannedVal) : null,
-        actual: actualVal.trim() !== "" ? parseFloat(actualVal) : null,
-      };
-
-      const indexToUpdate = savedValues.findIndex((v) => v.id === selectedId); // Use selectedId, not currentEditingId
-
-      if (indexToUpdate > -1) {
-        savedValues[indexToUpdate] = newValue;
-      } else {
-        savedValues.push(newValue);
-      }
-      await storage.saveData(storage.APP_KEYS.CUSTOM_VALUES_KEY, savedValues);
-      utils.showToast("Valor personalizado salvo!", "success");
-      setTimeout(closeModal, 1500);
-    } catch (error) {
-      utils.showToast(`Erro ao salvar: ${error.message}`, "error");
-    } finally {
-      modalSaveBtn.disabled = false;
-      modalSaveBtn.textContent = "Salvar";
+    if (!selectedId) {
+      utils.showToast("Selecione uma atividade ou grupo.", "error");
+      throw new Error("Nenhum item selecionado.");
     }
+    if (plannedVal.trim() === "" && actualVal.trim() === "") {
+      utils.showToast(
+        "Preencha pelo menos um dos valores (previsto ou realizado).",
+        "error"
+      );
+      throw new Error("Valores vazios.");
+    }
+
+    let savedValues = await storage.getData(storage.APP_KEYS.CUSTOM_VALUES_KEY);
+    const newValue = {
+      id: selectedId,
+      planned: plannedVal.trim() !== "" ? parseFloat(plannedVal) : null,
+      actual: actualVal.trim() !== "" ? parseFloat(actualVal) : null,
+    };
+
+    const indexToUpdate = savedValues.findIndex((v) => v.id === selectedId); // Use selectedId, not currentEditingId
+
+    if (indexToUpdate > -1) {
+      savedValues[indexToUpdate] = newValue;
+    } else {
+      savedValues.push(newValue);
+    }
+    await storage.saveData(storage.APP_KEYS.CUSTOM_VALUES_KEY, savedValues);
+    utils.showToast("Valor personalizado salvo!", "success");
+    setTimeout(() => modalInstance.close(), 1500);
   }
 
   async function deleteCustomValue(id) {
@@ -1448,7 +1183,7 @@ import { storage } from "./storage.js";
       )?.tomselect;
       const selectedIds = filterSelect ? filterSelect.getValue() : [];
       const customValuesMap = new Map(savedValues.map((v) => [v.id, v]));
-      const allSelectableItems = await getSelectableItems();
+      const allSelectableItems = await dataLoader.getSelectableItems();
 
       // Determine the initial set of items to consider, based on the filter
       let itemsToConsider;
@@ -1613,6 +1348,7 @@ import { storage } from "./storage.js";
     if (dropAreaEl) dropAreaEl.classList.add("hidden");
     if (confirmationAreaEl) confirmationAreaEl.classList.add("hidden");
 
+    const modalBody = document.getElementById("modal-body");
     modalBody.innerHTML +=
       '<div class="message-box info mt-4">Processando arquivo...</div>';
 
@@ -1676,7 +1412,7 @@ import { storage } from "./storage.js";
         }));
         await storage.saveData(storage.APP_KEYS.WEEKS_DATA_KEY, finalData);
         utils.showToast("Mapeamento de semanas salvo com sucesso!", "success");
-        setTimeout(closeModal, 1500);
+        setTimeout(() => modal.close(), 1500);
       } catch (err) {
         console.error(err);
         utils.showToast(`Erro ao processar o arquivo: ${err.message}`, "error");
@@ -1693,9 +1429,11 @@ import { storage } from "./storage.js";
       storage.getData(storage.APP_KEYS.RESTRICTIONS_LIST_KEY),
       storage.getData(storage.APP_KEYS.RESTRICTION_LINKS_KEY),
     ]);
-    modalSaveBtn.style.display = "none";
-    modalSubtitle.textContent =
-      "Gerencie todas as restrições do projeto e seus vínculos.";
+    modal.setSaveHandler(null);
+    modal.showSaveButton(false);
+    modal.setSubtitle(
+      "Gerencie todas as restrições do projeto e seus vínculos."
+    );
     if (document.getElementById("add-new-restriction-btn")) {
       document.getElementById("add-new-restriction-btn").onclick = () =>
         renderRestrictionEditForm();
@@ -1749,7 +1487,7 @@ import { storage } from "./storage.js";
       tableHtml += `<tr><td colspan="5" class="text-center text-tertiary py-6">Nenhuma restrição criada.</td></tr>`;
     }
     tableHtml += `</tbody></table></div>`;
-    modalBody.innerHTML = tableHtml;
+    modal.setBody(tableHtml);
   }
 
   async function renderRestrictionEditForm(restrictionId = null) {
@@ -1776,11 +1514,11 @@ import { storage } from "./storage.js";
           .map((l) => l.itemId)
       : [];
 
-    modalSubtitle.textContent = restrictionId
-      ? `Editando restrição`
-      : "Criando uma nova restrição.";
-    modalSaveBtn.style.display = "inline-flex";
-    modalHeaderActions.innerHTML = "";
+    modal.setSubtitle(
+      restrictionId ? `Editando restrição` : "Criando uma nova restrição."
+    );
+    modal.showSaveButton(true);
+    modal.hideHeaderAction();
 
     const mCategories = [
       "Método",
@@ -1791,7 +1529,7 @@ import { storage } from "./storage.js";
       "Meio Ambiente",
     ];
 
-    modalBody.innerHTML = `
+    modal.setBody(`
                 <div class="space-y-4">
                     <div>
                       <label for="restriction-desc-input" class="font-bold text-primary">Descrição da Restrição</label>
@@ -1844,9 +1582,9 @@ import { storage } from "./storage.js";
                         <label for="restriction-links-select" class="font-semibold text-primary mt-2 block">Vincular a Atividades/Grupos:</label>
                         <select id="restriction-links-select" multiple></select>
                     </div>
-                </div>`;
+                </div>`);
 
-    const allOptions = await getSelectableItems();
+    const allOptions = await dataLoader.getSelectableItems();
 
     const tomSelect = new TomSelect("#restriction-links-select", {
       options: allOptions,
@@ -1854,7 +1592,7 @@ import { storage } from "./storage.js";
       placeholder: "Selecione os itens impactados...",
     });
     tomSelect.setValue(linkedItemIds);
-    activeTomSelects.push(tomSelect);
+    activeTomSelects = [tomSelect];
 
     document
       .getElementById("m-category-selector")
@@ -1875,75 +1613,61 @@ import { storage } from "./storage.js";
           btn.classList.add("active");
           categoryInput.value = btn.dataset.category;
         }
-        modalSaveBtn.disabled = false;
+        modal.enableSaveButton();
       });
   }
 
-  async function saveRestriction() {
-    modalSaveBtn.disabled = true;
-    modalSaveBtn.textContent = "Salvando...";
-    try {
-      const desc = document
-        .getElementById("restriction-desc-input")
-        .value.trim();
-      if (!desc) {
-        utils.showToast(
-          "A descrição da restrição não pode ser vazia.",
-          "error"
-        );
-        return;
-      }
-
-      let [restrictionsList, restrictionLinks] = await Promise.all([
-        storage.getData(storage.APP_KEYS.RESTRICTIONS_LIST_KEY),
-        storage.getData(storage.APP_KEYS.RESTRICTION_LINKS_KEY),
-      ]);
-
-      const restrictionData = {
-        id: currentEditingId || utils.uuidv4(),
-        desc: desc,
-        resp: document.getElementById("restriction-resp-input").value,
-        due: document.getElementById("restriction-due-input").value,
-        status: document.getElementById("restriction-status-select").value,
-        category: document.getElementById("restr-category").value || null,
-      };
-
-      if (currentEditingId) {
-        const index = restrictionsList.findIndex(
-          (r) => r.id === currentEditingId
-        );
-        if (index > -1) restrictionsList[index] = restrictionData;
-      } else {
-        restrictionsList.push(restrictionData);
-      }
-
-      const tomSelect = activeTomSelects[0];
-      const selectedItemIds = tomSelect ? tomSelect.getValue() : [];
-      const otherLinks = restrictionLinks.filter(
-        (l) => l.restrictionId !== restrictionData.id
-      );
-      const newLinks = selectedItemIds.map((itemId) => ({
-        restrictionId: restrictionData.id,
-        itemId,
-      }));
-      const finalLinks = [...otherLinks, ...newLinks];
-
-      await Promise.all([
-        storage.saveData(
-          storage.APP_KEYS.RESTRICTIONS_LIST_KEY,
-          restrictionsList
-        ),
-        storage.saveData(storage.APP_KEYS.RESTRICTION_LINKS_KEY, finalLinks),
-      ]);
-
-      utils.showToast("Restrição salva com sucesso!", "success");
-      setTimeout(closeModal, 1500);
-    } catch (error) {
-      utils.showToast(`Erro ao salvar restrição: ${error.message}`, "error");
-    } finally {
-      modalSaveBtn.disabled = false;
-      modalSaveBtn.textContent = "Salvar";
+  async function saveRestriction(modalInstance) {
+    const desc = document.getElementById("restriction-desc-input").value.trim();
+    if (!desc) {
+      utils.showToast("A descrição da restrição não pode ser vazia.", "error");
+      throw new Error("Descrição vazia.");
     }
+
+    let [restrictionsList, restrictionLinks] = await Promise.all([
+      storage.getData(storage.APP_KEYS.RESTRICTIONS_LIST_KEY),
+      storage.getData(storage.APP_KEYS.RESTRICTION_LINKS_KEY),
+    ]);
+
+    const restrictionData = {
+      id: currentEditingId || utils.uuidv4(),
+      desc: desc,
+      resp: document.getElementById("restriction-resp-input").value,
+      due: document.getElementById("restriction-due-input").value,
+      status: document.getElementById("restriction-status-select").value,
+      category: document.getElementById("restr-category").value || null,
+    };
+
+    if (currentEditingId) {
+      const index = restrictionsList.findIndex(
+        (r) => r.id === currentEditingId
+      );
+      if (index > -1) restrictionsList[index] = restrictionData;
+    } else {
+      restrictionsList.push(restrictionData);
+    }
+
+    const tomSelect = activeTomSelects[0];
+    const selectedItemIds = tomSelect ? tomSelect.getValue() : [];
+    const otherLinks = restrictionLinks.filter(
+      (l) => l.restrictionId !== restrictionData.id
+    );
+    const newLinks = selectedItemIds.map((itemId) => ({
+      restrictionId: restrictionData.id,
+      itemId,
+    }));
+    const finalLinks = [...otherLinks, ...newLinks];
+
+    await Promise.all([
+      storage.saveData(
+        storage.APP_KEYS.RESTRICTIONS_LIST_KEY,
+        restrictionsList
+      ),
+      storage.saveData(storage.APP_KEYS.RESTRICTION_LINKS_KEY, finalLinks),
+    ]);
+
+    utils.showToast("Restrição salva com sucesso!", "success");
+    setTimeout(() => modalInstance.close(), 1500);
   }
 
   async function deleteRestriction(restrictionId) {
@@ -1989,7 +1713,7 @@ import { storage } from "./storage.js";
 
     const [allActivityDetails, allItems] = await Promise.all([
       storage.getActivityDetails(),
-      getSelectableItems(),
+      dataLoader.getSelectableItems(),
     ]);
 
     const allItemsMap = new Map(
@@ -2000,17 +1724,16 @@ import { storage } from "./storage.js";
     let availableItems = [];
 
     // Configure modal for form view
-    modalSaveBtn.style.display = "inline-flex";
+    modal.showSaveButton(true);
     document.getElementById("modal-cancel-btn").textContent = "Voltar à Lista";
-    document.getElementById("modal-cancel-btn").onclick =
-      handleActivityDetailsConfig; // Go back to list
-    modalHeaderActions.style.display = "none";
+    modal.setCancelHandler(handleActivityDetailsConfig);
+    modal.hideHeaderAction();
 
     if (parentId) {
       // EDIT MODE
-      modalSubtitle.textContent = `Editando plano para: ${
-        allItemsMap.get(parentId) || parentId
-      }`;
+      modal.setSubtitle(
+        `Editando plano para: ${allItemsMap.get(parentId) || parentId}`
+      );
       currentSteps = allActivityDetails.filter((d) => d.parentId === parentId);
       // Sort steps by start date, then name
       currentSteps.sort((a, b) => {
@@ -2022,7 +1745,7 @@ import { storage } from "./storage.js";
       itemSelectorHtml = `<input type="hidden" id="plan-parent-id" value="${parentId}">`;
     } else {
       // CREATE MODE
-      modalSubtitle.textContent = "Criando um novo plano de execução";
+      modal.setSubtitle("Criando um novo plano de execução");
       const itemsWithPlans = new Set(allActivityDetails.map((d) => d.parentId));
       availableItems = allItems.filter(
         (item) => !itemsWithPlans.has(item.value)
@@ -2047,7 +1770,7 @@ import { storage } from "./storage.js";
       </div>
     `;
 
-    modalBody.innerHTML = `
+    modal.setBody(`
       <div class="space-y-4">
         ${itemSelectorHtml}
         <div>
@@ -2062,68 +1785,56 @@ import { storage } from "./storage.js";
           <button id="add-step-btn" type="button" class="mt-2 px-3 py-1.5 bg-gray-200 text-primary rounded-md hover:bg-gray-300 text-sm font-semibold">Adicionar Etapa</button>
         </div>
       </div>
-    `;
+    `);
 
     if (!parentId) {
       const tomSelect = new TomSelect("#plan-item-select", {
         options: availableItems,
       });
-      activeTomSelects.push(tomSelect);
+      activeTomSelects = [tomSelect];
     }
 
-    modalSaveBtn.onclick = () => savePlan();
+    modal.setSaveHandler(savePlan);
   }
 
-  async function savePlan() {
-    modalSaveBtn.disabled = true;
-    modalSaveBtn.textContent = "Salvando...";
-
-    try {
-      let parentId;
-      if (currentEditingId) {
-        parentId = currentEditingId;
-      } else {
-        const tomSelect =
-          document.getElementById("plan-item-select")?.tomselect;
-        parentId = tomSelect ? tomSelect.getValue() : null;
-      }
-
-      if (!parentId) {
-        utils.showToast("Selecione uma atividade ou grupo.", "error");
-        return;
-      }
-
-      const stepsList = document.getElementById("steps-list");
-      const stepElements = stepsList.querySelectorAll(".execution-step");
-      const steps = Array.from(stepElements)
-        .map((el) => {
-          const inputs = el.querySelectorAll("input");
-          return {
-            name: inputs[0].value.trim(),
-            startDate: inputs[1].value,
-            endDate: inputs[2].value,
-          };
-        })
-        .filter((step) => step.name);
-
-      await storage.saveActivityDetails(parentId, steps);
-
-      utils.showToast("Plano salvo com sucesso!", "success");
-      currentEditingId = null; // Reset editing state
-      await renderActivityDetailsTable(); // Go back to list view
-    } catch (error) {
-      console.error("Error saving plan:", error);
-      utils.showToast(`Erro ao salvar plano: ${error.message}`, "error");
-    } finally {
-      modalSaveBtn.disabled = false;
-      modalSaveBtn.textContent = "Salvar";
+  async function savePlan(modalInstance) {
+    let parentId;
+    if (currentEditingId) {
+      parentId = currentEditingId;
+    } else {
+      const tomSelect = document.getElementById("plan-item-select")?.tomselect;
+      parentId = tomSelect ? tomSelect.getValue() : null;
     }
+
+    if (!parentId) {
+      utils.showToast("Selecione uma atividade ou grupo.", "error");
+      throw new Error("Nenhum item selecionado.");
+    }
+
+    const stepsList = document.getElementById("steps-list");
+    const stepElements = stepsList.querySelectorAll(".execution-step");
+    const steps = Array.from(stepElements)
+      .map((el) => {
+        const inputs = el.querySelectorAll("input");
+        return {
+          name: inputs[0].value.trim(),
+          startDate: inputs[1].value,
+          endDate: inputs[2].value,
+        };
+      })
+      .filter((step) => step.name);
+
+    await storage.saveActivityDetails(parentId, steps);
+
+    utils.showToast("Plano salvo com sucesso!", "success");
+    currentEditingId = null; // Reset editing state
+    await renderActivityDetailsTable(); // Go back to list view
   }
 
   // --- Milestone Management Functions ---
 
   async function handleMilestonesConfig() {
-    openModal({
+    modal.open({
       title: "Área de Trabalho de Marcos",
       subtitle: "Gerencie múltiplos marcos e seus vínculos de uma só vez.",
       bodyHtml: `
@@ -2136,14 +1847,12 @@ import { storage } from "./storage.js";
                 </div>
             </div>`,
       saveHandler: saveAllMilestones,
-      needsMoreHeight: true,
       customClass: "milestone-editor-modal",
+      onOpen: () => {
+        renderMilestoneWorkspace();
+        // Event listeners for the dynamic content are added in renderMilestoneWorkspace
+      },
     });
-
-    modalSaveBtn.textContent = "Salvar Tudo";
-    document.getElementById("modal-cancel-btn").textContent = "Fechar";
-
-    await renderMilestoneWorkspace();
   }
 
   async function renderMilestoneWorkspace() {
@@ -2218,15 +1927,14 @@ import { storage } from "./storage.js";
 
     treeContainer.innerHTML = `<div class="skeleton skeleton-block h-48"></div>`;
 
-    const [project, mapping] = await Promise.all([
-      getProjectBase(),
-      storage.getData(storage.APP_KEYS.ACTIVITY_MAPPING_KEY),
-    ]);
+    const { projectBase, activityMapping } =
+      await dataLoader.loadCoreDataForConfig();
+    const tasks = projectBase?.TASK?.rows || [];
+    const wbsHierarchy = projectBase?.WBS_HIERARCHY?.rows || [];
 
-    const wbsHierarchy = project?.WBS_HIERARCHY?.rows || [];
-    const tasks = project?.TASK?.rows || [];
-
-    const groupedTaskCodes = new Set(mapping.flatMap((g) => g.taskCodes));
+    const groupedTaskCodes = new Set(
+      activityMapping.flatMap((g) => g.taskCodes)
+    );
     const ungroupedTasks = tasks.filter(
       (t) => !groupedTaskCodes.has(t.task_code)
     );
@@ -2251,25 +1959,21 @@ import { storage } from "./storage.js";
     // Attach tasks and groups to the tree
     ungroupedTasks.forEach((task) => {
       if (wbsMap.has(task.wbs_stable_id_ref)) {
-        wbsMap
-          .get(task.wbs_stable_id_ref)
-          .items.push({
-            type: "task",
-            id: task.task_code,
-            name: `${task.task_code} - ${task.task_name}`,
-          });
+        wbsMap.get(task.wbs_stable_id_ref).items.push({
+          type: "task",
+          id: task.task_code,
+          name: `${task.task_code} - ${task.task_name}`,
+        });
       }
     });
-    mapping.forEach((group) => {
+    activityMapping.forEach((group) => {
       const firstTask = tasks.find((t) => t.task_code === group.taskCodes[0]);
       if (firstTask && wbsMap.has(firstTask.wbs_stable_id_ref)) {
-        wbsMap
-          .get(firstTask.wbs_stable_id_ref)
-          .items.push({
-            type: "group",
-            id: `group::${group.groupId}`,
-            name: `[Grupo] ${group.groupName}`,
-          });
+        wbsMap.get(firstTask.wbs_stable_id_ref).items.push({
+          type: "group",
+          id: `group::${group.groupId}`,
+          name: `[Grupo] ${group.groupName}`,
+        });
       }
     });
 
@@ -2406,80 +2110,73 @@ import { storage } from "./storage.js";
     allLeafCheckboxes.forEach((cb) => updateParentCheckbox(cb));
   }
 
-  async function saveAllMilestones() {
-    modalSaveBtn.disabled = true;
-    modalSaveBtn.textContent = "Salvando...";
-    try {
-      const listPanel = document.getElementById("milestones-list-panel");
-      const milestoneItems = listPanel.querySelectorAll(".milestone-item");
-      const linksByMilestoneId = new Map(
-        JSON.parse(listPanel.dataset.links || "[]").map(([key, value]) => [
-          key,
-          new Set(value),
-        ])
-      );
+  async function saveAllMilestones(modalInstance) {
+    const listPanel = document.getElementById("milestones-list-panel");
+    const milestoneItems = listPanel.querySelectorAll(".milestone-item");
+    const linksByMilestoneId = new Map(
+      JSON.parse(listPanel.dataset.links || "[]").map(([key, value]) => [
+        key,
+        new Set(value),
+      ])
+    );
 
-      const finalMilestones = [];
-      const finalLinks = [];
+    const finalMilestones = [];
+    const finalLinks = [];
 
-      milestoneItems.forEach((item) => {
-        const name = item.querySelector(".milestone-name-input").value.trim();
-        const date = item.querySelector(".milestone-date-input").value;
-        const id = item.dataset.milestoneId;
+    milestoneItems.forEach((item) => {
+      const name = item.querySelector(".milestone-name-input").value.trim();
+      const date = item.querySelector(".milestone-date-input").value;
+      const id = item.dataset.milestoneId;
 
-        if (name && date) {
-          finalMilestones.push({ id, name, date });
-          const links = linksByMilestoneId.get(id);
-          if (links) {
-            links.forEach((itemId) => {
-              finalLinks.push({ milestoneId: id, itemId });
-            });
-          }
+      if (name && date) {
+        finalMilestones.push({ id, name, date });
+        const links = linksByMilestoneId.get(id);
+        if (links) {
+          links.forEach((itemId) => {
+            finalLinks.push({ milestoneId: id, itemId });
+          });
         }
-      });
+      }
+    });
 
-      await Promise.all([
-        storage.saveData(storage.APP_KEYS.MILESTONES_LIST_KEY, finalMilestones),
-        storage.saveData(storage.APP_KEYS.MILESTONE_LINKS_KEY, finalLinks),
-      ]);
+    await Promise.all([
+      storage.saveData(storage.APP_KEYS.MILESTONES_LIST_KEY, finalMilestones),
+      storage.saveData(storage.APP_KEYS.MILESTONE_LINKS_KEY, finalLinks),
+    ]);
 
-      utils.showToast("Marcos salvos com sucesso!", "success");
-      setTimeout(closeModal, 1500);
-    } catch (error) {
-      utils.showToast(`Erro ao salvar marcos: ${error.message}`, "error");
-    } finally {
-      modalSaveBtn.disabled = false;
-      modalSaveBtn.textContent = "Salvar Tudo";
-    }
+    utils.showToast("Marcos salvos com sucesso!", "success");
+    setTimeout(() => modalInstance.close(), 1500);
   }
 
   // --- Checklist Management Functions ---
 
   async function handleChecklistsConfig() {
-    openModal({
+    modal.open({
       title: "Gerenciar Checklists",
       subtitle: "Crie e edite modelos de checklist para usar no planejamento.",
-      needsMoreHeight: true,
+      customClass: "modal-large",
+      showFooter: false,
       headerAction: {
         id: "add-new-checklist-btn",
         icon: `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" /></svg>`,
         tooltip: "Adicionar Novo Checklist",
       },
+      onOpen: () => {
+        renderChecklistsTable();
+      },
     });
-    modalSaveBtn.style.display = "none";
-    document.getElementById("modal-cancel-btn").textContent = "Fechar";
-    await renderChecklistsTable();
   }
 
   async function renderChecklistsTable() {
-    modalTitle.textContent = "Gerenciar Checklists";
-    modalSubtitle.textContent =
-      "Crie e edite modelos de checklist para usar no planejamento.";
-    modalHeaderActions.style.display = "block";
+    modal.setTitle("Gerenciar Checklists");
+    modal.setSubtitle(
+      "Crie e edite modelos de checklist para usar no planejamento."
+    );
+    modal.showHeaderAction();
     document.getElementById("add-new-checklist-btn").onclick = () =>
       renderChecklistEditForm();
-    modalSaveBtn.style.display = "none";
-    document.getElementById("modal-cancel-btn").textContent = "Fechar";
+    modal.showSaveButton(false);
+    modal.setCancelText("Fechar");
 
     const checklists = await storage.getData(storage.APP_KEYS.CHECKLISTS_KEY);
     checklists.sort((a, b) => a.name.localeCompare(b.name));
@@ -2500,7 +2197,7 @@ import { storage } from "./storage.js";
       tableHtml += `<tr><td colspan="3" class="text-center text-tertiary py-6">Nenhum checklist criado.</td></tr>`;
     }
     tableHtml += `</tbody></table></div>`;
-    modalBody.innerHTML = tableHtml;
+    modal.setBody(tableHtml);
   }
 
   async function renderChecklistEditForm(checklistId = null) {
@@ -2514,15 +2211,12 @@ import { storage } from "./storage.js";
           items: [{ id: utils.uuidv4(), question: "", category: "" }],
         };
 
-    modalTitle.textContent = checklistId
-      ? "Editar Checklist"
-      : "Novo Checklist";
-    modalHeaderActions.style.display = "none";
-    modalSaveBtn.style.display = "inline-flex";
-    modalSaveBtn.onclick = saveChecklist;
-    document.getElementById("modal-cancel-btn").textContent = "Cancelar";
-    document.getElementById("modal-cancel-btn").onclick =
-      handleChecklistsConfig;
+    modal.setTitle(checklistId ? "Editar Checklist" : "Novo Checklist");
+    modal.hideHeaderAction();
+    modal.showSaveButton(true);
+    modal.setSaveHandler(saveChecklist);
+    modal.setCancelText("Cancelar");
+    modal.setCancelHandler(handleChecklistsConfig);
 
     const mCategories = ["MET", "MAQ", "MAO", "MAT", "MED", "MEI"];
 
@@ -2547,7 +2241,8 @@ import { storage } from "./storage.js";
           </div>`;
     };
 
-    modalBody.innerHTML = `<div class="space-y-4">
+    modal.setBody(
+      `<div class="space-y-4">
           <div>
               <label for="checklist-name-input" class="form-label font-bold text-primary">Nome do Checklist</label>
               <input type="text" id="checklist-name-input" value="${
@@ -2561,65 +2256,51 @@ import { storage } from "./storage.js";
                 .join("")}</div>
               <button id="add-checklist-item-btn" type="button" class="mt-2 px-3 py-1.5 bg-gray-200 text-primary rounded-md hover:bg-gray-300 text-sm font-semibold">Adicionar Pergunta</button>
           </div>
-      </div>`;
+      </div>`
+    );
   }
 
-  async function saveChecklist() {
-    modalSaveBtn.disabled = true;
-    modalSaveBtn.textContent = "Salvando...";
-
-    try {
-      const name = document.getElementById("checklist-name-input").value.trim();
-      if (!name) {
-        utils.showToast("O nome do checklist não pode ser vazio.", "error");
-        return;
-      }
-
-      const itemsContainer = document.getElementById(
-        "checklist-items-container"
-      );
-      const itemRows = itemsContainer.querySelectorAll(".checklist-item-row");
-      const items = Array.from(itemRows)
-        .map((row) => {
-          const question = row.querySelector('input[type="text"]').value.trim();
-          const activeCategoryBtn = row.querySelector(".m-category-btn.active");
-          return {
-            id: row.dataset.itemId,
-            question: question,
-            category: activeCategoryBtn
-              ? activeCategoryBtn.dataset.category
-              : null,
-          };
-        })
-        .filter((item) => item.question); // Only save items with a question
-
-      if (items.length === 0) {
-        utils.showToast(
-          "O checklist deve ter pelo menos uma pergunta.",
-          "error"
-        );
-        return;
-      }
-
-      const checklists = await storage.getData(storage.APP_KEYS.CHECKLISTS_KEY);
-      if (currentEditingId) {
-        const index = checklists.findIndex((c) => c.id === currentEditingId);
-        if (index > -1) {
-          checklists[index] = { ...checklists[index], name, items };
-        }
-      } else {
-        checklists.push({ id: utils.uuidv4(), name, items });
-      }
-
-      await storage.saveData(storage.APP_KEYS.CHECKLISTS_KEY, checklists);
-      utils.showToast("Checklist salvo!", "success");
-      await renderChecklistsTable(); // Go back to the list
-    } catch (error) {
-      utils.showToast(`Erro ao salvar: ${error.message}`, "error");
-    } finally {
-      modalSaveBtn.disabled = false;
-      modalSaveBtn.textContent = "Salvar";
+  async function saveChecklist(modalInstance) {
+    const name = document.getElementById("checklist-name-input").value.trim();
+    if (!name) {
+      utils.showToast("O nome do checklist não pode ser vazio.", "error");
+      throw new Error("Nome vazio.");
     }
+
+    const itemsContainer = document.getElementById("checklist-items-container");
+    const itemRows = itemsContainer.querySelectorAll(".checklist-item-row");
+    const items = Array.from(itemRows)
+      .map((row) => {
+        const question = row.querySelector('input[type="text"]').value.trim();
+        const activeCategoryBtn = row.querySelector(".m-category-btn.active");
+        return {
+          id: row.dataset.itemId,
+          question: question,
+          category: activeCategoryBtn
+            ? activeCategoryBtn.dataset.category
+            : null,
+        };
+      })
+      .filter((item) => item.question); // Only save items with a question
+
+    if (items.length === 0) {
+      utils.showToast("O checklist deve ter pelo menos uma pergunta.", "error");
+      throw new Error("Checklist vazio.");
+    }
+
+    const checklists = await storage.getData(storage.APP_KEYS.CHECKLISTS_KEY);
+    if (currentEditingId) {
+      const index = checklists.findIndex((c) => c.id === currentEditingId);
+      if (index > -1) {
+        checklists[index] = { ...checklists[index], name, items };
+      }
+    } else {
+      checklists.push({ id: utils.uuidv4(), name, items });
+    }
+
+    await storage.saveData(storage.APP_KEYS.CHECKLISTS_KEY, checklists);
+    utils.showToast("Checklist salvo!", "success");
+    await renderChecklistsTable(); // Go back to the list
   }
 
   async function deleteChecklist(checklistId) {
@@ -2675,16 +2356,54 @@ import { storage } from "./storage.js";
   configContainer.addEventListener("click", handleCardClick);
   configContainer.addEventListener("keydown", handleCardKeydown);
 
-  modal.addEventListener("click", (e) => {
-    if (e.target === modal) closeModal();
-  });
+  document.getElementById("modal-body").addEventListener("click", (e) => {
+    // Dynamic event listeners for content injected into the modal
+    if (e.target.closest(".edit-group-btn"))
+      renderGroupEditForm(e.target.closest(".edit-group-btn").dataset.groupId);
+    if (e.target.closest(".delete-group-btn"))
+      deleteGroup(e.target.closest(".delete-group-btn").dataset.groupId);
 
-  // Listener for user input on any form element within the modal
-  modalBody.addEventListener("input", () => {
-    enableSaveButton();
-  });
+    if (e.target.closest(".edit-custom-value-btn"))
+      renderCustomValueEditForm(
+        e.target.closest(".edit-custom-value-btn").dataset.id
+      );
+    if (e.target.closest(".delete-custom-value-btn"))
+      deleteCustomValue(
+        e.target.closest(".delete-custom-value-btn").dataset.id
+      );
 
-  modalBody.addEventListener("click", (e) => {
+    if (e.target.closest(".edit-restriction-btn"))
+      renderRestrictionEditForm(
+        e.target.closest(".edit-restriction-btn").dataset.id
+      );
+    if (e.target.closest(".delete-restriction-btn"))
+      deleteRestriction(e.target.closest(".delete-restriction-btn").dataset.id);
+
+    if (e.target.closest(".edit-plan-btn"))
+      renderPlanEditForm(e.target.closest(".edit-plan-btn").dataset.parentId);
+    if (e.target.closest(".delete-plan-btn"))
+      deletePlan(e.target.closest(".delete-plan-btn").dataset.parentId);
+
+    if (e.target.closest(".edit-checklist-btn"))
+      renderChecklistEditForm(
+        e.target.closest(".edit-checklist-btn").dataset.id
+      );
+    if (e.target.closest(".delete-checklist-btn"))
+      deleteChecklist(e.target.closest(".delete-checklist-btn").dataset.id);
+
+    if (e.target.id === "add-step-btn") {
+      const list = document.getElementById("steps-list");
+      if (list) {
+        list.insertAdjacentHTML(
+          "beforeend",
+          `<div class="execution-step"><input type="text" class="form-input flex-grow" placeholder="Descrição da etapa"><input type="date" class="form-input"><input type="date" class="form-input"><button type="button" class="remove-step-btn" title="Remover Etapa">&times;</button></div>`
+        );
+      }
+    }
+    if (e.target.closest(".remove-step-btn")) {
+      e.target.closest(".execution-step").remove();
+      modal.enableSaveButton();
+    }
     if (e.target.id === "add-checklist-item-btn") {
       const container = document.getElementById("checklist-items-container");
       const mCategories = ["MET", "MAQ", "MAO", "MAT", "MED", "MEI"];
@@ -2706,7 +2425,7 @@ import { storage } from "./storage.js";
     if (checklistItemRow) {
       if (e.target.closest(".remove-item-btn")) {
         checklistItemRow.remove();
-        enableSaveButton();
+        modal.enableSaveButton();
         return;
       }
       if (e.target.closest(".m-category-btn")) {
@@ -2718,12 +2437,11 @@ import { storage } from "./storage.js";
         if (!isAlreadyActive) {
           btn.classList.add("active");
         }
-        enableSaveButton();
+        modal.enableSaveButton();
         return;
       }
     }
-
-    // New Milestone Workspace Listeners
+    // Milestone Workspace Listeners
     if (e.target.id === "add-milestone-btn") {
       const listItems = document.getElementById("milestones-list-items");
       const newId = `new_${utils.uuidv4()}`;
@@ -2741,13 +2459,12 @@ import { storage } from "./storage.js";
                 </div>
             </div>`;
       listItems.insertAdjacentHTML("beforeend", newItemHtml);
-      enableSaveButton();
+      modal.enableSaveButton();
       return;
     }
-
     if (e.target.closest(".delete-milestone-btn")) {
       e.target.closest(".milestone-item").remove();
-      enableSaveButton();
+      modal.enableSaveButton();
       // If the deleted one was active, reset the tree panel
       if (e.target.closest(".milestone-item").classList.contains("is-active")) {
         document.getElementById(
@@ -2756,7 +2473,6 @@ import { storage } from "./storage.js";
       }
       return;
     }
-
     if (e.target.closest(".link-milestone-btn")) {
       const milestoneItem = e.target.closest(".milestone-item");
       if (activeMilestoneRow) {
@@ -2783,10 +2499,9 @@ import { storage } from "./storage.js";
       const selectedIdsSet = linksMap.get(milestoneId) || new Set();
 
       renderWbsSelectionTree(selectedIdsSet);
-      enableSaveButton();
+      modal.enableSaveButton();
       return;
     }
-
     const milestoneTree = e.target.closest("#milestone-tree-container");
     if (milestoneTree) {
       if (e.target.classList.contains("milestone-tree-toggle")) {
@@ -2810,12 +2525,13 @@ import { storage } from "./storage.js";
             .forEach((cb) => (cb.checked = isChecked));
         }
         updateParentCheckbox(e.target);
-        enableSaveButton();
+        modal.enableSaveButton();
       }
     }
   });
 
-  modalBody.addEventListener("change", (e) => {
+  document.getElementById("modal-body").addEventListener("change", (e) => {
+    // Listener for tree checkbox changes in Milestone editor
     const milestoneTree = e.target.closest("#milestone-tree-container");
     if (milestoneTree && activeMilestoneRow) {
       const listPanel = document.getElementById("milestones-list-panel");
@@ -2849,60 +2565,6 @@ import { storage } from "./storage.js";
           Array.from(value),
         ])
       );
-    }
-  });
-
-  document
-    .getElementById("modal-close-btn")
-    .addEventListener("click", closeModal);
-  document
-    .getElementById("modal-cancel-btn")
-    .addEventListener("click", closeModal);
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && modal.classList.contains("active")) closeModal();
-    if (modal.classList.contains("active")) handleFocusTrap(e);
-  });
-
-  modalBody.addEventListener("click", (e) => {
-    const editBtn = e.target.closest(".edit-group-btn");
-    if (editBtn) renderGroupEditForm(editBtn.dataset.groupId);
-    const deleteBtn = e.target.closest(".delete-group-btn");
-    if (deleteBtn) deleteGroup(deleteBtn.dataset.groupId);
-
-    const editCustomBtn = e.target.closest(".edit-custom-value-btn");
-    if (editCustomBtn) renderCustomValueEditForm(editCustomBtn.dataset.id);
-    const deleteCustomBtn = e.target.closest(".delete-custom-value-btn");
-    if (deleteCustomBtn) deleteCustomValue(deleteCustomBtn.dataset.id);
-
-    const editRestrictionBtn = e.target.closest(".edit-restriction-btn");
-    if (editRestrictionBtn)
-      renderRestrictionEditForm(editRestrictionBtn.dataset.id);
-    const deleteRestrictionBtn = e.target.closest(".delete-restriction-btn");
-    if (deleteRestrictionBtn)
-      deleteRestriction(deleteRestrictionBtn.dataset.id);
-
-    const editPlanBtn = e.target.closest(".edit-plan-btn");
-    if (editPlanBtn) renderPlanEditForm(editPlanBtn.dataset.parentId);
-    const deletePlanBtn = e.target.closest(".delete-plan-btn");
-    if (deletePlanBtn) deletePlan(deletePlanBtn.dataset.parentId);
-
-    const editChecklistBtn = e.target.closest(".edit-checklist-btn");
-    if (editChecklistBtn) renderChecklistEditForm(editChecklistBtn.dataset.id);
-    const deleteChecklistBtn = e.target.closest(".delete-checklist-btn");
-    if (deleteChecklistBtn) deleteChecklist(deleteChecklistBtn.dataset.id);
-
-    if (e.target.id === "add-step-btn") {
-      const list = document.getElementById("steps-list");
-      if (list) {
-        list.insertAdjacentHTML(
-          "beforeend",
-          `<div class="execution-step"><input type="text" class="form-input flex-grow" placeholder="Descrição da etapa"><input type="date" class="form-input"><input type="date" class="form-input"><button type="button" class="remove-step-btn" title="Remover Etapa">&times;</button></div>`
-        );
-      }
-    }
-    if (e.target.closest(".remove-step-btn")) {
-      e.target.closest(".execution-step").remove();
-      enableSaveButton();
     }
   });
 })();
