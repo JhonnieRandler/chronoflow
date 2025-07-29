@@ -1,7 +1,11 @@
 import { initializationError, showFirebaseError } from "./firebase-config.js";
 import * as utils from "./utils.js";
 import { dataLoader } from "./data-loader.js";
-import { renderMessageBox, renderAnalysisSkeleton } from "./ui-components.js";
+import {
+  renderMessageBox,
+  renderAnalysisSkeleton,
+  renderHTMLTable,
+} from "./ui-components.js";
 
 // First, check if Firebase is configured. If not, show an error and stop.
 if (initializationError) {
@@ -369,24 +373,41 @@ if (initializationError) {
         (p) => p.pred_task_id_code === taskCode
       ) || [];
 
-    const renderRelRows = (items, type) => {
-      if (items.length === 0)
-        return `<tr><td colspan="3" class="text-center text-tertiary py-4">Nenhuma ${type} encontrada.</td></tr>`;
-      return items
-        .map((item) => {
-          const typeInfo = PRED_TYPE_MAP[item.pred_type] || {
-            text: item.pred_type,
-            description: "Tipo desconhecido",
-            class: "",
-          };
-          const relTaskCode =
-            type === "predecessora"
-              ? item.pred_task_id_code
-              : item.task_id_code;
-          return `<tr><td>${relTaskCode}</td><td><span class="badge ${typeInfo.class}" data-tooltip="${typeInfo.description}">${typeInfo.text}</span></td><td>${item.lag_hr_cnt}h</td></tr>`;
-        })
-        .join("");
-    };
+    const relTableHeaders = ["Atividade", "Tipo", "Lag"];
+    const predsRows = preds.map((item) => {
+      const typeInfo = PRED_TYPE_MAP[item.pred_type] || {
+        text: item.pred_type,
+        description: "Tipo desconhecido",
+        class: "",
+      };
+      return {
+        Atividade: item.pred_task_id_code,
+        Tipo: `<span class="badge ${typeInfo.class}" data-tooltip="${typeInfo.description}">${typeInfo.text}</span>`,
+        Lag: `${item.lag_hr_cnt}h`,
+      };
+    });
+    const succsRows = succs.map((item) => {
+      const typeInfo = PRED_TYPE_MAP[item.pred_type] || {
+        text: item.pred_type,
+        description: "Tipo desconhecido",
+        class: "",
+      };
+      return {
+        Atividade: item.task_id_code,
+        Tipo: `<span class="badge ${typeInfo.class}" data-tooltip="${typeInfo.description}">${typeInfo.text}</span>`,
+        Lag: `${item.lag_hr_cnt}h`,
+      };
+    });
+
+    const predsTableHtml =
+      preds.length > 0
+        ? renderHTMLTable(relTableHeaders, predsRows)
+        : renderMessageBox("Nenhuma predecessora encontrada.", "info");
+
+    const succsTableHtml =
+      succs.length > 0
+        ? renderHTMLTable(relTableHeaders, succsRows)
+        : renderMessageBox("Nenhuma sucessora encontrada.", "info");
 
     const allTaskRsrcData = Object.values(projectVersions).flatMap(
       (version) => version.TASKRSRC?.rows || []
@@ -480,14 +501,8 @@ if (initializationError) {
             ${renderMilestonesCard(taskCode, trendEndDate, wbsPath)}
             ${renderExecutionPlanCard(taskCode)}
             <div class="card p-6 bg-secondary"><h2 class="text-xl font-bold text-primary mb-4">Relacionamentos</h2><div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div><h3 class="font-semibold text-secondary mb-2">Predecessoras</h3><div class="table-container"><table><thead><tr><th>Atividade</th><th>Tipo</th><th>Lag</th></tr></thead><tbody>${renderRelRows(
-                  preds,
-                  "predecessora"
-                )}</tbody></table></div></div>
-                <div><h3 class="font-semibold text-secondary mb-2">Sucessoras</h3><div class="table-container"><table><thead><tr><th>Atividade</th><th>Tipo</th><th>Lag</th></tr></thead><tbody>${renderRelRows(
-                  succs,
-                  "sucessora"
-                )}</tbody></table></div></div>
+                <div><h3 class="font-semibold text-secondary mb-2">Predecessoras</h3>${predsTableHtml}</div>
+                <div><h3 class="font-semibold text-secondary mb-2">Sucessoras</h3>${succsTableHtml}</div>
             </div></div>
             <div class="card p-6 bg-secondary">
                 <h2 class="text-xl font-bold text-primary mb-4">Histórico Semanal de Recursos (Cronograma)</h2>
@@ -671,7 +686,7 @@ if (initializationError) {
         const isMain = rsrcName === mainResource;
         return `<tr class="${
           isMain ? "main-resource-row" : ""
-        }"><td class="dark:text-gray-200">${rsrcName}${
+        }"><td class="text-primary">${rsrcName}${
           isMain ? " ⭐" : ""
         }</td><td class="text-right">${utils.formatNumberBR(
           r.planned
@@ -690,6 +705,27 @@ if (initializationError) {
       tasksInGroup.length > 0
         ? utils.getWbsPathObjects(tasksInGroup[0].wbs_stable_id_ref, wbsMap)
         : [];
+
+    const memberTasksRows = tasksInGroup
+      .sort((a, b) => a.task_code.localeCompare(b.task_code))
+      .map((task) => ({
+        Código: `<span class="font-mono text-sm">${task.task_code}</span>`,
+        "Nome da Atividade": task.task_name,
+      }));
+
+    const memberTasksTableHtml = renderHTMLTable(
+      ["Código", "Nome da Atividade"],
+      memberTasksRows
+    );
+
+    const membersCardHtml = `
+      <div class="card p-6 bg-secondary">
+        <h2 class="text-xl font-bold text-primary mb-4">Atividades do Grupo (${tasksInGroup.length})</h2>
+        <div class="max-h-72 overflow-y-auto">
+          ${memberTasksTableHtml}
+        </div>
+      </div>
+    `;
 
     let html = `
       <div class="space-y-6">
@@ -712,6 +748,7 @@ if (initializationError) {
     )}</span></div>
               </div>
           </div>
+          ${membersCardHtml}
           ${renderGenuineValuesCard(fullGroupId)}
           ${renderMilestonesCard(
             fullGroupId,

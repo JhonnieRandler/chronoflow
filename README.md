@@ -88,6 +88,14 @@ Uma página de BI dedicada a transformar dados de restrições em inteligência 
 - **Análise de Tendência:** Apresenta um gráfico da evolução das restrições (pendentes vs. resolvidas) ao longo das semanas, permitindo avaliar a eficácia da equipe na resolução de problemas.
 - **Lista Detalhada:** Fornece uma tabela de todas as restrições pendentes, ordenadas por prazo, para facilitar a priorização e ação.
 
+### `visualizador.html` (Visualizador de Tabelas)
+
+Uma ferramenta de diagnóstico e depuração para desenvolvedores e usuários avançados.
+
+- **Seleção de Versão e Tabela:** Permite selecionar qualquer versão de projeto carregada e qualquer uma das tabelas de dados brutos (`TASK`, `TASKRSRC`, `PROJWBS`, etc.).
+- **Visualização de Dados:** Exibe os dados da tabela selecionada em um formato de tabela limpo.
+- **Filtragem Dinâmica:** Inclui um campo de busca que filtra os dados da tabela em tempo real, facilitando a localização de informações específicas.
+
 ## ✨ 4. Comunicação e Apresentação
 
 Para facilitar a comunicação e o uso da ferramenta em reuniões de equipe, foram adicionadas funcionalidades que transformam o ChronoFlow em uma plataforma de apresentação.
